@@ -1,77 +1,77 @@
-# ArduPilot su scheda MINI AHRS (ESP32-S31)
+# ArduPilot on the MINI AHRS board (ESP32-S31)
 
-ArduPilot standard, con EKF3, portato su ESP32-S31 (ESP-IDF 6.1) per la scheda MINI AHRS V1.2, modulo ESP32-S31-WROOM-1-N16R16V.
+Standard ArduPilot, with EKF3, ported to the ESP32-S31 (ESP-IDF 6.1) for the MINI AHRS V1.2 board, module ESP32-S31-WROOM-1-N16R16V.
 
-- Board: `esp32s31mini`, hwdef in questa cartella.
-- Base: ArduPilot master `dc78bc5` (ottobre 2026).
-- Veicoli: ArduPlane, ArduRover, ArduCopter (la scheda non ha uscite PWM né CAN, vedi sotto).
-- Navigazione: AHRS/EKF3 di ArduPilot, nessuna modifica (`AHRS_EKF_TYPE 3`, default).
+- Board: `esp32s31mini`, hwdef in this directory.
+- Base: ArduPilot master `dc78bc5` (October 2026).
+- Vehicles: ArduPlane, ArduRover, ArduCopter (the board has no PWM outputs and no CAN, see below).
+- Navigation: ArduPilot AHRS/EKF3, unmodified (`AHRS_EKF_TYPE 3`, the default).
 
 ## Build
 
-Serve ESP-IDF v6.1 (branch `release/v6.1`; per ESP-IDF l'S31 è un target *preview*) su Linux o WSL. ESP-IDF non accetta spazi nel percorso: clona il repository in una cartella senza spazi.
+ESP-IDF v6.1 is required (branch `release/v6.1`; the S31 is a *preview* target in ESP-IDF), on Linux or WSL. ESP-IDF does not accept spaces in the path: clone the repository into a directory without spaces.
 
 ```sh
 . ~/esp/esp-idf-v6.1/export.sh
 git submodule update --init --recursive
 ./waf configure --board esp32s31mini
-./waf plane        # oppure: ./waf rover, ./waf copter
+./waf plane        # or: ./waf rover, ./waf copter
 ```
 
-Dopo ogni modifica a `hwdef.dat` va ripetuto `./waf configure`. Le immagini sono in `build/esp32s31mini/esp-idf_build/`: `bootloader/bootloader.bin`, `partition_table/partition-table.bin`, `ardupilot.bin`.
+Run `./waf configure` again after every change to `hwdef.dat`. The images are in `build/esp32s31mini/esp-idf_build/`: `bootloader/bootloader.bin`, `partition_table/partition-table.bin`, `ardupilot.bin`.
 
-## Flash
+## Flashing
 
-Via USB (connettore USB-C, USB Serial/JTAG dell'ESP32-S31). Sul collegamento USB della scheda funziona solo `--no-stub` a 115200 baud:
+Over USB (USB-C connector, USB Serial/JTAG of the ESP32-S31). On the board's USB link only `--no-stub` at 115200 baud works:
 
 ```sh
 cd build/esp32s31mini/esp-idf_build
-python -m esptool --chip esp32s31 -p <PORTA> -b 115200 --no-stub write-flash \
+python -m esptool --chip esp32s31 -p <PORT> -b 115200 --no-stub write-flash \
     --flash-mode dio --flash-freq 80m --flash-size 16MB \
     0x2000 bootloader/bootloader.bin 0x10000 partition_table/partition-table.bin 0x20000 ardupilot.bin
 ```
 
-Per aggiornare solo il firmware basta `0x20000 ardupilot.bin`: bootloader, tabella delle partizioni e parametri restano. Se sulla scheda c'era un altro firmware ArduPilot, al primo avvio conviene azzerare i parametri (`FORMAT_VERSION 0`, oppure "Reset to defaults" dalla GCS).
+To update only the firmware, `0x20000 ardupilot.bin` is enough: the bootloader, the partition table and the parameters are kept. If the board ran another ArduPilot firmware before, reset the parameters at the first boot (`FORMAT_VERSION 0`, or "Reset to defaults" from the GCS).
 
-Dopo il flash il chip resta in modalità download: il nuovo firmware parte solo dopo aver scollegato e ricollegato l'USB.
+After flashing, the chip stays in download mode: the new firmware starts only after unplugging and replugging the USB cable.
 
-Se Windows segnala "dispositivo non riconosciuto": USB scollegato, collega il pad 27 del modulo (IO61) a GND, collega l'USB, togli il filo e, con l'USB sempre collegato, flasha aggiungendo `--before no-reset`.
+If Windows reports "USB device not recognized": with the USB unplugged, connect pad 27 of the module (IO61) to GND, plug the USB in, remove the wire and, with the USB still connected, flash adding `--before no-reset`.
 
-## Mappa della scheda
+## Board map
 
-| Funzione | GPIO | ArduPilot |
+| Function | GPIO | ArduPilot |
 |---|---|---|
 | SPI SCK / MOSI / MISO | 20 / 21 / 22 | `ESP32_SPIBUS SPI2_HOST` |
-| SCH16T CS / RESET / DRY | 25 / 17 / 19 | `IMU SCH16T`, `ROTATION_ROLL_180`, `HAL_SCH16T_RESET_PIN 17`; DRY non usato |
+| SCH16T CS / RESET / DRY | 25 / 17 / 19 | `IMU SCH16T`, `ROTATION_ROLL_180`, `HAL_SCH16T_RESET_PIN 17`; DRY not used |
 | BMP581 #1 / #2 CS | 23 / 24 | `BARO BMP581` x2 |
-| RM3100 CS | 38 | `COMPASS RM3100`, `ROTATION_ROLL_180` (modulo capovolto sotto la scheda) |
+| RM3100 CS | 38 | `COMPASS RM3100`, `ROTATION_ROLL_180` (module upside down under the board) |
 | ELVH CS | 18 | airspeed `SPI:elvh`, `ARSPD_TYPE 21` |
-| UART1 RX / TX | 8 / 9 (connettore S1) | SERIAL3, GPS |
-| UART2 RX / TX | 10 / 11 (connettore S2) | SERIAL2, telemetria o RC seriale (CRSF/ELRS: `SERIAL2_PROTOCOL 23`) |
+| UART1 RX / TX | 8 / 9 (connector S1) | SERIAL3, GPS |
+| UART2 RX / TX | 10 / 11 (connector S2) | SERIAL2, telemetry or serial RC (CRSF/ELRS: `SERIAL2_PROTOCOL 23`) |
 | USB D- / D+ | 33 / 34 | SERIAL0 (USB Serial/JTAG, MAVLink) |
-| LED1 / LED2 | 13 / 12 | LED di stato, vedi sotto |
+| LED1 / LED2 | 13 / 12 | status LEDs, see below |
 | Wi-Fi | — | SERIAL1, access point `ardupilot-s31` (password `ardupilot1`), UDP 192.168.4.1:14550 |
 
-Note sulla V1.2, misurate sulla scheda:
-- I connettori S1 e S2 non sono sui pin dello schema (10/11 e 12/13), ma su IO8/IO9 e IO10/IO11. Il pin marcato `R` è l'RX della scheda: va collegato al TX del dispositivo.
-- I LED sono su IO13 e IO12, non su IO14 e IO15 come da schema. LED3 (IO16) non è usato.
-- La linea `CSmag` (IO18) è a 0 V al modulo e teneva l'RM3100 sempre selezionato: il CS dell'RM3100 è ponticellato su IO38. IO18 resta come CS dell'ELVH, che sulla V1.2 di prova non è collegato.
-- CAN (MCP2542FD): TXD e RXD non arrivano a nessun GPIO leggibile, quindi il CAN non è configurato (niente righe `ESP32_CAN`, niente DroneCAN). L'HAL ha già il driver CAN (TWAI): su una scheda con il CAN cablato basta `ESP32_CAN <TX> <RX>` nell'hwdef.
-- Nessuna uscita PWM e nessun ingresso RC dedicato: l'RC arriva da un protocollo seriale.
-- Nessuna SD: log, scripting e filesystem sono disattivati.
+Notes on the V1.2 board, measured on the hardware:
+- Connectors S1 and S2 are not on the schematic pins (10/11 and 12/13) but on IO8/IO9 and IO10/IO11. The pin marked `R` is the board RX: connect it to the TX of the device.
+- The LEDs are on IO13 and IO12, not on IO14 and IO15 as in the schematic. LED3 (IO16) is not used.
+- The `CSmag` line (IO18) reads 0 V at the module and kept the RM3100 always selected: the RM3100 CS is bridged to IO38. IO18 stays as the ELVH CS, which is not connected on the V1.2 test board.
+- CAN (MCP2542FD): TXD and RXD reach no readable GPIO, so CAN is not configured (no `ESP32_CAN` lines, no DroneCAN). The HAL already has the CAN (TWAI) driver: on a board with CAN wired, `ESP32_CAN <TX> <RX>` in the hwdef is enough.
+- No PWM outputs and no dedicated RC input: RC comes from a serial protocol.
+- No SD card: logging, scripting and the filesystem are disabled.
 
-Le rotazioni di SCH16T e RM3100 vanno ricontrollate ruotando la scheda a mano (vedi sotto).
+The SCH16T and RM3100 rotations should be checked by rotating the board by hand (see below).
 
-## Configurazione
+## Configuration
 
-La configurazione hardware sta in due file di questa cartella:
+The hardware configuration lives in two files in this directory:
 
-| File | Contenuto | Quando ha effetto |
+| File | Contents | When it takes effect |
 |---|---|---|
-| `hwdef.dat` | pin, bus, sensori, variante IMU, uso dei core | alla compilazione (`./waf configure` + build) |
-| `defaults.parm` | default dei parametri | al primo avvio o dopo un reset dei parametri |
+| `hwdef.dat` | pins, buses, sensors, IMU variant, use of the cores | at build time (`./waf configure` + build) |
+| `defaults.parm` | parameter defaults | at the first boot or after a parameter reset |
 
-### IMU SCH16T
+### SCH16T IMU
 
 ```
 define HAL_SCH16T_VARIANT 10    # 1 = SCH16T-K01, 10 = SCH16T-K10
@@ -79,120 +79,120 @@ define HAL_SCH16T_VARIANT 10    # 1 = SCH16T-K01, 10 = SCH16T-K10
 
 | | SCH16T-K01 | SCH16T-K10 |
 |---|---|---|
-| Range gyro | ±300 °/s | ±2000 °/s |
-| Range accel | ±8 g | ±16 g |
-| Sensibilità usata dal driver (20 bit) | 1600 LSB/(°/s), 3200 LSB/(m/s²), range di fabbrica | 200 LSB/(°/s) DYN3, 6400 LSB/(m/s²) DYN2, scritti all'avvio |
+| Gyro range | ±300 °/s | ±2000 °/s |
+| Accel range | ±8 g | ±16 g |
+| Sensitivity used by the driver (20 bit) | 1600 LSB/(°/s), 3200 LSB/(m/s²), factory ranges | 200 LSB/(°/s) DYN3, 6400 LSB/(m/s²) DYN2, written at start-up |
 
-Il valore deve corrispondere al componente montato: con la variante sbagliata le scale sono errate di un fattore 8 (gyro) o 2 (accel). Il default è K10; lo schema V1.2 riporta SCH16T-K01-10. Verifica a scheda montata:
-- accelerometro: ferma e in piano, `RAW_IMU` / `SCALED_IMU` deve dare circa −9,8 m/s² su Z (−4,9 o −19,6 indicano la variante sbagliata);
-- gyro: ruotando la scheda di 90° attorno all'asse verticale lo yaw della GCS deve cambiare di 90°.
+The value must match the part on the board: with the wrong variant the scales are off by a factor of 8 (gyro) or 2 (accel). The default is K10; the V1.2 schematic lists SCH16T-K01-10. To check on the assembled board:
+- accelerometer: still and level, `RAW_IMU` / `SCALED_IMU` must read about −9.8 m/s² on Z (−4.9 or −19.6 mean the wrong variant);
+- gyro: rotating the board by 90° about the vertical axis must change the GCS yaw by 90°.
 
-Filtro interno e frequenza di lettura:
+Internal filter and read rate:
 
 ```
-define HAL_SCH16T_LPF_CODE 0x000     # 68 Hz su tutti gli assi
-define HAL_SCH16T_SAMPLE_RATE 1000   # letture al secondo
+define HAL_SCH16T_LPF_CODE 0x000     # 68 Hz on every axis
+define HAL_SCH16T_SAMPLE_RATE 1000   # reads per second
 ```
 
-Il codice ripete tre volte (3 bit per asse) il filtro: `000` 68 Hz, `001` 30 Hz, `010` 13 Hz, `011` 280 Hz, `100` 370 Hz, `101` 235 Hz (per esempio 30 Hz su tutti gli assi è `0x049`). Il datasheet chiede almeno 500 Hz di lettura con 68 Hz, 1000 Hz con 235 e 280 Hz, 2000 Hz con 370 Hz. Il driver legge le uscite interpolate con 7 frame SPI in pipeline, controlla CRC e stato di ogni frame e pubblica la temperatura a 10 Hz.
+The code repeats the filter three times (3 bits per axis): `000` 68 Hz, `001` 30 Hz, `010` 13 Hz, `011` 280 Hz, `100` 370 Hz, `101` 235 Hz (for example 30 Hz on every axis is `0x049`). The datasheet asks for at least 500 Hz reading with 68 Hz, 1000 Hz with 235 and 280 Hz, 2000 Hz with 370 Hz. The driver reads the interpolated outputs with 7 pipelined SPI frames, checks the CRC and status of every frame and publishes the temperature at 10 Hz.
 
-### Rumori EKF3 (SCH16T-K10, RM3100)
+### EKF3 noise (SCH16T-K10, RM3100)
 
-EKF3 usa i rumori di processo come deviazione standard per passo di predizione divisa per il passo: varianza per passo = (dt · NSE)². Un rumore bianco di densità N dà varianza N² · dt, quindi NSE = N / √dt. Un offset che deriva come random walk di σ in un tempo T dà NSE = σ / (√T · √dt). I valori sotto sono calcolati con dt = 12 ms (`EKF_TARGET_DT`); Plane e Rover, con il loop a 50 Hz, predicono ogni 20 ms e con gli stessi parametri hanno una varianza al secondo 1,67 volte più grande, cioè più prudente.
+EKF3 takes its process noises as the standard deviation per prediction step divided by the step: variance per step = (dt · NSE)². A white noise of density N gives a variance of N² · dt, so NSE = N / √dt. An offset drifting as a random walk of σ over a time T gives NSE = σ / (√T · √dt). The values below are computed with dt = 12 ms (`EKF_TARGET_DT`); Plane and Rover, with a 50 Hz loop, predict every 20 ms and with the same parameters have a 1.67 times larger variance per second, that is more conservative.
 
-| Parametro | Dato del sensore | Solo sensore | Default EKF3 | In `defaults.parm` |
+| Parameter | Sensor data | Sensor only | EKF3 default | In `defaults.parm` |
 |---|---|---|---|---|
-| `EK3_GYRO_P_NSE` (rad/s) | K10: 6 m°/s/√Hz | 9,6·10⁻⁴ | 1,5·10⁻² | default |
-| `EK3_ACC_P_NSE` (m/s²) | K10: 0,8 mm/s²/√Hz | 7,3·10⁻³ | 0,35 | default |
-| `EK3_GBIAS_P_NSE` (rad/s²) | K10: deriva dell'offset gyro 0,015 °/s/min max, 1σ = max/3 | 1,0·10⁻⁴ | 1·10⁻³ | 1·10⁻⁴ |
-| `EK3_ABIAS_P_NSE` (m/s³) | K10: deriva dell'offset accel 0,002 m/s²/min max, 1σ = max/3 | 7,9·10⁻⁴ | 2·10⁻² | 8·10⁻⁴ |
-| `EK3_MAG_M_NSE` (Gauss) | RM3100 a cycle count 200 (quello del driver): 15 nT | 1,5·10⁻⁴ | 0,05 | default |
+| `EK3_GYRO_P_NSE` (rad/s) | K10: 6 m°/s/√Hz | 9.6·10⁻⁴ | 1.5·10⁻² | default |
+| `EK3_ACC_P_NSE` (m/s²) | K10: 0.8 mm/s²/√Hz | 7.3·10⁻³ | 0.35 | default |
+| `EK3_GBIAS_P_NSE` (rad/s²) | K10: gyro offset drift 0.015 °/s/min max, 1σ = max/3 | 1.0·10⁻⁴ | 1·10⁻³ | 1·10⁻⁴ |
+| `EK3_ABIAS_P_NSE` (m/s³) | K10: accel offset drift 0.002 m/s²/min max, 1σ = max/3 | 7.9·10⁻⁴ | 2·10⁻² | 8·10⁻⁴ |
+| `EK3_MAG_M_NSE` (Gauss) | RM3100 at cycle count 200 (the driver setting): 15 nT | 1.5·10⁻⁴ | 0.05 | default |
 
-- **Offset (GBIAS, ABIAS).** Il punto di forza del K10 è la stabilità degli offset: il random walk dal datasheet è 10 volte (gyro) e 25 volte (accel) sotto i default di EKF3, che sono il massimo del loro range. Con questi valori EKF3 impara gli offset più lentamente e con meno rumore. Un offset che cambia più in fretta del previsto resta coperto da `EK3_GYRO_P_NSE` e `EK3_ACC_P_NSE`, lasciati ai default.
-- **Rumore bianco (GYRO, ACC).** Il rumore bianco del K10 è della stessa classe dei MEMS comuni per cui sono tarati i default di EKF3. I default stanno circa 15 volte (gyro) e 50 volte (accel) sopra il valore del solo sensore: è il margine per vibrazioni, saturazioni, errori di scala e di tempo, che dipendono dall'installazione e non dal datasheet. Valori con margine 5× e 4× sarebbero 4,8·10⁻³ e 2,9·10⁻². Vanno provati solo guardando le innovazioni in telemetria (`EKF_STATUS_REPORT`, rapporti sotto 1, prima a terra e poi in volo): la scheda non ha log.
-- **Bussola (MAG_M_NSE).** I 15 nT dell'RM3100 sono 70 volte sotto il minimo che EKF3 accetta nella fusione (0,01 Gauss). L'errore della misura viene dal residuo di calibrazione (`COMPASS_CAL_FIT` accetta fino a 16 mGauss) e dalle correnti vicine alla bussola, cioè dall'installazione. Con una calibrazione buona (fit sotto 5 mGauss) e senza disturbi di corrente si può provare 0,02.
+- **Offsets (GBIAS, ABIAS).** The strength of the K10 is the stability of its offsets: the random walk from the datasheet is 10 times (gyro) and 25 times (accel) below the EKF3 defaults, which are the top of their range. With these values EKF3 learns the offsets more slowly and with less noise. An offset changing faster than expected is still covered by `EK3_GYRO_P_NSE` and `EK3_ACC_P_NSE`, left at their defaults.
+- **White noise (GYRO, ACC).** The white noise of the K10 is in the same class as the common MEMS parts the EKF3 defaults are tuned for. The defaults are about 15 times (gyro) and 50 times (accel) the sensor-only value: that is the margin for vibration, clipping, scale factor and timing errors, which depend on the installation and not on the datasheet. Values with a 5× and 4× margin would be 4.8·10⁻³ and 2.9·10⁻². Try them only while watching the innovations in telemetry (`EKF_STATUS_REPORT`, ratios below 1, first on the ground and then in flight): the board has no log.
+- **Compass (MAG_M_NSE).** The 15 nT of the RM3100 are 70 times below the minimum EKF3 accepts in the fusion (0.01 Gauss). The measurement error comes from the calibration residual (`COMPASS_CAL_FIT` accepts up to 16 mGauss) and from currents near the compass, that is from the installation. With a good calibration (fit below 5 mGauss) and no current interference, 0.02 can be tried.
 
-Sono valori per il K10. Per il K01 il datasheet completo non era disponibile.
+These values are for the K10. The full K01 datasheet was not available.
 
-### Bus SPI
+### SPI bus
 
-- ESP-IDF accetta al massimo 6 dispositivi per host SPI, e una riga `ESP32_SPIDEV` con `LoSpeed` diverso da `HiSpeed` ne occupa due. Oggi: SCH16T 2, BMP581 1 + 1, RM3100 1, ELVH 1 = 6. Un dispositivo in più ferma l'avvio con `SPI: no room for <nome> on its bus`.
-- Ogni dispositivo presente sul bus va elencato, anche senza driver, così il suo chip select resta alto. L'HAL porta alti tutti i CS prima di inizializzare i bus.
-- Limiti dei componenti: SCH16T 10 MHz, BMP581 12 MHz, RM3100 1 MHz, ELVH 800 kHz.
-- Per leggere un solo barometro si toglie la seconda riga `BARO` e si lascia la sua riga `ESP32_SPIDEV`.
+- ESP-IDF takes at most 6 devices per SPI host, and an `ESP32_SPIDEV` line with `LoSpeed` different from `HiSpeed` takes two of them. Today: SCH16T 2, BMP581 1 + 1, RM3100 1, ELVH 1 = 6. One more device stops the boot with `SPI: no room for <name> on its bus`.
+- Every device on the bus must be listed, even without a driver, so that its chip select stays high. The HAL drives every CS high before the buses are set up.
+- Part limits: SCH16T 10 MHz, BMP581 12 MHz, RM3100 1 MHz, ELVH 800 kHz.
+- To read only one barometer, remove the second `BARO` line and keep its `ESP32_SPIDEV` line.
 
-### Orientamento dei sensori
+### Sensor orientation
 
-L'ultima parola delle righe `IMU` e `COMPASS` è la rotazione dal frame del sensore al frame della scheda (X avanti, Y destra, Z giù). Se è la scheda a essere montata ruotata sul veicolo, non toccare l'hwdef e usa `AHRS_ORIENTATION`; per la bussola c'è anche `COMPASS_ORIENT`.
+The last word of the `IMU` and `COMPASS` lines is the rotation from the sensor frame to the board frame (X forward, Y right, Z down). If the board is mounted rotated on the vehicle, leave the hwdef alone and use `AHRS_ORIENTATION`; for the compass there is also `COMPASS_ORIENT`.
 
-### Airspeed ELVH
+### ELVH airspeed
 
-Driver nuovo `AP_Airspeed_ELVH`: sensori di pressione differenziale All Sensors ELVH con uscita SPI e funzione di trasferimento A (10–90 %), per esempio ELVH-L02D-HRRD-C-NSA4.
+New driver `AP_Airspeed_ELVH`: All Sensors ELVH differential pressure sensors with SPI output and transfer function A (10–90 %), for example ELVH-L02D-HRRD-C-NSA4.
 
-- `ARSPD_TYPE 21` (SPI-ELVH). Su ArduPlane è il default della scheda; sugli altri veicoli il default è 0.
-- `ARSPD_ELVH_RNG`: codice del range come nell'ordine del componente (3 = L02D, ±2 inH2O, default della scheda); 0 prende il fondoscala da `ARSPD_PSI_RANGE`.
-- Il driver legge a 100 Hz; all'avvio richiede tre letture valide (stato, pressione nella banda calibrata, temperatura coerente). Pressioni fuori dalla banda calibrata vengono scartate: l'L02D satura a ±498 Pa, circa 28 m/s di velocità indicata.
-- In SITL c'è un ELVH-L04D simulato su `SPI:elvh`; il test `Tools/autotest/autotest.py test.Plane.AirspeedDrivers` lo prova sia con `ARSPD_ELVH_RNG 4` sia con `ARSPD_PSI_RANGE`.
+- `ARSPD_TYPE 21` (SPI-ELVH). It is the board default on ArduPlane; on the other vehicles the default is 0.
+- `ARSPD_ELVH_RNG` selects the range by the code in the part number: 1 F50D (±0.5 inH2O), 2 L01D, 3 L02D (±2 inH2O, board default), 4 L04D, 5 L05D, 6 L10D, 7 L20D, 8 L30D, 9 L60D, 10 MF25D (±2.5 mbar), 11 MF12D, 12 M025D, 13 M050D, 14 M075D, 15 M100D, 16 M160D, 17 M250D (±250 mbar). 0 takes the full scale from `ARSPD_PSI_RANGE`. It is read at boot.
+- The driver reads at 100 Hz; at start-up it needs three valid reads (status, pressure inside the calibrated band, consistent temperature). Pressures outside the calibrated band are discarded: the L02D saturates at ±498 Pa, about 28 m/s indicated airspeed.
+- SITL has a simulated ELVH-L04D on `SPI:elvh`; the test `Tools/autotest/autotest.py test.Plane.AirspeedDrivers` flies it both with `ARSPD_ELVH_RNG 4` and with `ARSPD_PSI_RANGE`.
 
 ### GPS
 
-`defaults.parm` imposta un u-blox su SERIAL3 a 460800 (`SERIAL3_BAUD 460`) con `GPS_AUTO_CONFIG 0`: con l'autoconfigurazione il driver accetta l'u-blox solo a 230400, quindi il modulo deve essere già configurato per mandare UBX (NAV-PVT e DOP) a 460800 e salvato in flash. Il GPS è alimentato dalla scheda: dopo un ricollegamento dell'USB riparte a freddo.
+`defaults.parm` sets a u-blox on SERIAL3 at 460800 (`SERIAL3_BAUD 460`) with `GPS_AUTO_CONFIG 0`: with auto-configuration the driver accepts the u-blox only at 230400, so the module must already be configured to send UBX (NAV-PVT and DOP) at 460800 and saved to its flash. The GPS is powered by the board: after a USB replug it does a cold start.
 
-### Seriali e telemetria
+### Serial ports and telemetry
 
-- SERIAL0: USB Serial/JTAG. Aprire la porta con DTR e RTS bassi: chiuderla dopo averla aperta con DTR/RTS alti (default di pyserial e pymavlink) zittisce l'USB della scheda fino a un ricollegamento. `HAL_ESP32_USB_NO_CHIP_RESET` impedisce che le linee USB resettino il chip.
+- SERIAL0: USB Serial/JTAG. Open the port with DTR and RTS low: closing it after opening it with DTR/RTS high (the pyserial and pymavlink default) silences the board USB until a replug. `HAL_ESP32_USB_NO_CHIP_RESET` stops the USB lines from resetting the chip.
 - SERIAL1: Wi-Fi UDP.
-- SERIAL2, SERIAL3: UART su S2 e S1. L'HAL ESP32 supporta `SERIALn_OPTIONS` bit 3 (swap RX/TX).
-- Le stream rate sono per canale MAVLink (`MAVn_*`): SERIAL0 è MAV1, il Wi-Fi MAV2, SERIAL2 MAV3.
+- SERIAL2, SERIAL3: UARTs on S2 and S1. The ESP32 HAL supports `SERIALn_OPTIONS` bit 3 (RX/TX swap).
+- Stream rates are per MAVLink channel (`MAVn_*`): SERIAL0 is MAV1, Wi-Fi MAV2, SERIAL2 MAV3.
 
-## LED di stato
+## Status LEDs
 
-| LED | Stato | Significato |
+| LED | State | Meaning |
 |---|---|---|
-| LED1 | lampeggio veloce (circa 2 Hz) | avvio in corso |
-| LED1 | fisso | inizializzazione finita (setup del veicolo e calibrazione IMU) |
-| LED2 | spento | GPS assente o senza fix 3D |
-| LED2 | lampeggio 1 Hz | fix 3D, AHRS ancora senza posizione assoluta |
-| LED2 | fisso | fix 3D e posizione assoluta dall'AHRS |
+| LED1 | fast flash (about 2 Hz) | starting up |
+| LED1 | solid | initialisation finished (vehicle setup and IMU calibration) |
+| LED2 | off | no GPS or no 3D fix |
+| LED2 | 1 Hz blink | 3D fix, AHRS without an absolute position yet |
+| LED2 | solid | 3D fix and absolute position from the AHRS |
 
-Arming, pre-arm e calibrazioni si leggono dalla GCS.
+Arming, pre-arm and calibration states are shown by the GCS.
 
-## Uso dei due core
+## Use of the two cores
 
-| Core | Thread |
+| Core | Threads |
 |---|---|
-| HP CPU0 | main loop (veicolo, AHRS/EKF3), timer, UART, thread del bus SPI (SCH16T a 1 kHz, baro, bussola) |
-| HP CPU1 | Wi-Fi/lwIP, IO, storage, thread delle librerie |
+| HP CPU0 | main loop (vehicle, AHRS/EKF3), timer, UART, SPI bus thread (SCH16T at 1 kHz, baros, compass) |
+| HP CPU1 | Wi-Fi/lwIP, IO, storage, library threads |
 
-Si configura dall'hwdef: `HAL_ESP32_FASTCPU`, `HAL_ESP32_SLOWCPU`, `HAL_ESP32_DEVICE_BUS_CPU`, `HAL_ESP32_THREAD_CPU` (e `HAL_ESP32_CAN_THREAD_CPU`, `HAL_ESP32_IO_THREAD_CPU`). Il carico arriva in telemetria: `SYS_STATUS.load` è il core più carico, misurato dal tempo idle di FreeRTOS; `NAMED_VALUE_FLOAT` `CPU0` e `CPU1` danno i due core in %.
+Set from the hwdef: `HAL_ESP32_FASTCPU`, `HAL_ESP32_SLOWCPU`, `HAL_ESP32_DEVICE_BUS_CPU`, `HAL_ESP32_THREAD_CPU` (and `HAL_ESP32_CAN_THREAD_CPU`, `HAL_ESP32_IO_THREAD_CPU`). The load is sent in telemetry: `SYS_STATUS.load` is the busiest core, measured from the FreeRTOS idle time; `NAMED_VALUE_FLOAT` `CPU0` and `CPU1` give each core in %.
 
-## Modifiche ad ArduPilot
+## Changes to ArduPilot
 
 Build:
-- `Tools/ardupilotwaf/boards.py`, `esp32.py`: classe `esp32s31` (toolchain `riscv32-esp-elf`, `-march=rv32imafcb_zicsr_zifencei_zaamo_zalrsc_zcb_zcmp_zcmt -mabi=ilp32f`, senza le estensioni PIE/Xesploop, perché ESP-IDF sposta sul core 1 i task che le usano); DroneCAN abilitato se l'hwdef contiene `ESP32_CAN`.
-- `libraries/AP_HAL_ESP32/targets/esp32s31/`: progetto ESP-IDF, `sdkconfig.defaults` (320 MHz, newlib, PSRAM disattivata), partizioni (app 6 MB). Il CMake linka tutti i componenti, perché in ESP-IDF 6 l'HAL è diviso in `esp_hal_*` con script linker ROM propri.
+- `Tools/ardupilotwaf/boards.py`, `esp32.py`: `esp32s31` board class (toolchain `riscv32-esp-elf`, `-march=rv32imafcb_zicsr_zifencei_zaamo_zalrsc_zcb_zcmp_zcmt -mabi=ilp32f`, without the PIE/Xesploop extensions, because ESP-IDF moves the tasks that use them to core 1); DroneCAN enabled when the hwdef has `ESP32_CAN` lines.
+- `libraries/AP_HAL_ESP32/targets/esp32s31/`: ESP-IDF project, `sdkconfig.defaults` (320 MHz, newlib, PSRAM disabled), partitions (6 MB app). The CMake file links every component, because in ESP-IDF 6 the HAL is split into `esp_hal_*` components with their own ROM linker scripts.
 
-HAL ESP32 su ESP-IDF 6.1:
-- `CANIface` (nuovo): CAN su TWAI con il driver a nodi `esp_twai`; RX in coda FreeRTOS da ISR, TX a slot, loopback per il time sync DroneCAN, recovery dal bus-off a 1 Hz.
-- `UARTDriver`: porta `USB_SERIAL_JTAG`; swap RX/TX con `SERIALn_OPTIONS`.
-- `Scheduler`, `DeviceBus`, `WiFi*`: core configurabili dall'hwdef, thread dei bus e delle librerie con affinità fissa.
-- `SPIDevice`: trasferimenti brevi (≤ 64 byte) in polling; CS portati alti prima di ogni setup dei bus; stop all'avvio se un host SPI non ha posto per un dispositivo.
-- `Util`: carico di ogni core dal tempo idle di FreeRTOS.
-- `Semaphores`: attese arrotondate al tick superiore.
-- RMT legacy (ingresso RC PWM/PPM) e I2C software (solo Xtensa) resi condizionali; capability MCPWM da `mcpwm_ll.h`; tabella I2C vuota ammessa; `ffconf.h` con `MIN`/`MAX`; `RCOutput` senza uscite.
-- `esp32_hwdef.py`: keyword `ESP32_CAN TX RX`.
+ESP32 HAL on ESP-IDF 6.1:
+- `CANIface` (new): CAN on TWAI with the `esp_twai` node driver; RX through a FreeRTOS queue from the ISR, TX slots, loopback for the DroneCAN time sync, bus-off recovery at 1 Hz.
+- `UARTDriver`: `USB_SERIAL_JTAG` port; RX/TX swap with `SERIALn_OPTIONS`.
+- `Scheduler`, `DeviceBus`, `WiFi*`: cores set from the hwdef, bus and library threads with a fixed affinity.
+- `SPIDevice`: short transfers (≤ 64 bytes) polled; all CS driven high before any bus setup; stop at boot when an SPI host has no room for a device.
+- `Util`: load of each core from the FreeRTOS idle time.
+- `Semaphores`: waits rounded up to the next tick.
+- Legacy RMT (PWM/PPM RC input) and software I2C (Xtensa only) made conditional; MCPWM capabilities from `mcpwm_ll.h`; empty I2C table allowed; `ffconf.h` with `MIN`/`MAX`; `RCOutput` without outputs.
+- `esp32_hwdef.py`: `ESP32_CAN TX RX` keyword.
 
-Driver e librerie:
-- `AP_InertialSensor_SCH16T` (nuovo): Murata SCH16T-K01/K10 diretto su SPI.
-- `AP_Airspeed_ELVH` (nuovo, `ARSPD_TYPE 21`, `ARSPD_ELVH_RNG`), con il sensore simulato in SITL e il test in `AirspeedDrivers`.
-- `AP_Notify`: `AP_BoardLED_InitGPS`, i due LED di stato.
-- `GCS_MAVLink`: `SYS_STATUS.load` dal carico dei core quando l'HAL lo misura, `NAMED_VALUE_FLOAT` `CPU0`/`CPU1`.
-- ArduPlane: `PLANE_GCS_SEND_TIME_US`, tempo per loop di `update_send` impostabile dalla board (3 ms qui).
+Drivers and libraries:
+- `AP_InertialSensor_SCH16T` (new): Murata SCH16T-K01/K10 directly on SPI.
+- `AP_Airspeed_ELVH` (new, `ARSPD_TYPE 21`, `ARSPD_ELVH_RNG`), with the simulated sensor in SITL and the case in `AirspeedDrivers`.
+- `AP_Notify`: `AP_BoardLED_InitGPS`, the two status LEDs.
+- `GCS_MAVLink`: `SYS_STATUS.load` from the core load when the HAL measures it, `NAMED_VALUE_FLOAT` `CPU0`/`CPU1`.
+- ArduPlane: `PLANE_GCS_SEND_TIME_US`, the per-loop time of `update_send` set by the board (3 ms here).
 
-## Stato
+## Status
 
-HAL, driver e pinout sono gli stessi già fatti girare sulla scheda V1.2 (USB, Wi-Fi, SCH16T, baro, RM3100, GPS, LED). Questa build con EKF3 non è ancora stata avviata sull'hardware. Da verificare al primo avvio:
-1. boot, console USB (SERIAL0) e Wi-Fi;
-2. variante e rotazione dell'IMU, rotazione della bussola, calibrazioni;
-3. EKF3: allineamento, uso di GPS e bussola, carico del core 0 (`CPU0`) con EKF3 nel main loop;
-4. ELVH sulla scheda dove è collegato: `DiffPress` vicino a 0 a pitot coperto e `Temp` plausibile.
+The HAL, the drivers and the pinout are the same that already ran on the V1.2 board (USB, Wi-Fi, SCH16T, baros, RM3100, GPS, LEDs). This EKF3 build has not been started on the hardware yet. To check at the first boot:
+1. boot, USB console (SERIAL0) and Wi-Fi;
+2. IMU variant and rotation, compass rotation, calibrations;
+3. EKF3: alignment, use of GPS and compass, load of core 0 (`CPU0`) with EKF3 in the main loop;
+4. ELVH on a board where it is connected: `DiffPress` close to 0 with the pitot covered and a plausible `Temp`.
