@@ -28,6 +28,12 @@
 
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
+// time update_send gets per loop: a slower board spends most of the default
+// before the first message goes out
+#ifndef PLANE_GCS_SEND_TIME_US
+#define PLANE_GCS_SEND_TIME_US 750
+#endif
+
 #define SCHED_TASK(func, rate_hz, max_time_micros, priority) SCHED_TASK_CLASS(Plane, &plane, func, rate_hz, max_time_micros, priority)
 #define FAST_TASK(func) FAST_TASK_CLASS(Plane, &plane, func)
 
@@ -85,7 +91,7 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
 #endif
     SCHED_TASK(ekf_check,              10,     75,  54),
     SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_receive,   300,  500,  57),
-    SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_send,      300,  750,  60),
+    SCHED_TASK_CLASS(GCS,            (GCS*)&plane._gcs,       update_send,      300,  PLANE_GCS_SEND_TIME_US,  60),
 #if AP_SERVORELAYEVENTS_ENABLED
     SCHED_TASK_CLASS(AP_ServoRelayEvents, &plane.ServoRelayEvents, update_events, 50, 150,  63),
 #endif
