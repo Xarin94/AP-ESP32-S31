@@ -145,6 +145,10 @@ New driver `AP_Airspeed_ELVH`: All Sensors ELVH differential pressure sensors wi
 - SERIAL2, SERIAL3: UARTs on S2 and S1. The ESP32 HAL supports `SERIALn_OPTIONS` bit 3 (RX/TX swap).
 - Stream rates are per MAVLink channel (`MAVn_*`): SERIAL0 is MAV1, Wi-Fi MAV2, SERIAL2 MAV3.
 
+## Live FFT
+
+With `INS_FFT_LIVE 1` the board sends the vibration spectrum of the SCH16T (gyro and accelerometer, 3.125–362.5 Hz, four times a second) to the GCS as `DEBUG_FLOAT_ARRAY` messages, about 4.2 kB/s on each link. The FFT runs in a low priority thread on core 1. Message format, computation and a receiver example: [FFT_LIVE.md](../../../AP_InertialSensor/FFT_LIVE.md).
+
 ## Status LEDs
 
 | LED | State | Meaning |
@@ -184,6 +188,7 @@ ESP32 HAL on ESP-IDF 6.1:
 
 Drivers and libraries:
 - `AP_InertialSensor_SCH16T` (new): Murata SCH16T-K01/K10 directly on SPI.
+- `AP_InertialSensor_Spectrum` (new): live vibration spectrum of the IMU over MAVLink (`INS_FFT_LIVE`, `AP_INERTIALSENSOR_SPECTRUM_ENABLED`), with the `FFTLive` autotest.
 - `AP_Airspeed_ELVH` (new, `ARSPD_TYPE 21`, `ARSPD_ELVH_RNG`), with the simulated sensor in SITL and the case in `AirspeedDrivers`.
 - `AP_Notify`: `AP_BoardLED_InitGPS`, the two status LEDs.
 - `GCS_MAVLink`: `SYS_STATUS.load` from the core load when the HAL measures it, `NAMED_VALUE_FLOAT` `CPU0`/`CPU1`.

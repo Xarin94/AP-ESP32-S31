@@ -51,6 +51,10 @@ define HAL_SCH16T_RESET_PIN 17
 define HAL_SCH16T_LPF_CODE 0x000
 define HAL_SCH16T_SAMPLE_RATE 1000
 
+# live vibration spectrum of the IMU over MAVLink (INS_FFT_LIVE, see
+# libraries/AP_InertialSensor/FFT_LIVE.md); the FFT thread runs on core 1
+define AP_INERTIALSENSOR_SPECTRUM_ENABLED 1
+
 # sensor axes: SCH16T x, -y, -z; the RM3100 module sits upside down under the
 # board (x, -y, -z), from a reading level and facing north
 IMU SCH16T SPI:sch16t ROTATION_ROLL_180
