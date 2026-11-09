@@ -3245,6 +3245,65 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
             self.context_pop()
         self.reboot_sitl()
 
+    def FFTLive(self):
+        '''Test the live IMU vibration spectrum (INS_FFT_LIVE)'''
+        vib_hz = 80.0
+        df = 800.0 / 256
+        names = ("FFT_GYRO", "FFT_ACC")
+        self.set_parameters({
+            "INS_FFT_LIVE": 1,
+            "SIM_VIB_FREQ_X": vib_hz,
+            "SIM_VIB_FREQ_Y": vib_hz,
+            "SIM_VIB_FREQ_Z": vib_hz,
+            "SIM_ACC1_RND": 1.0,
+            "SIM_GYR1_RND": 5.0,
+        })
+        self.reboot_sitl()
+        self.takeoff(alt=50)
+
+        # assemble the spectra as a GCS does (FFT_LIVE.md): two parts per
+        # sensor, joined by time_usec
+        pending = {}
+        spectra = {0: [], 1: []}
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() - tstart < 10:
+            m = self.mav.recv_match(type='DEBUG_FLOAT_ARRAY', blocking=True, timeout=1)
+            if m is None:
+                continue
+            name = m.name.split("\0")[0]
+            sensor, part = m.array_id >> 1, m.array_id & 1
+            if sensor > 1 or name != names[sensor]:
+                raise NotAchievedException("Unexpected DEBUG_FLOAT_ARRAY %s id %u" % (name, m.array_id))
+            p = pending.get(sensor)
+            if p is None or p["t"] != m.time_usec:
+                p = pending[sensor] = {"t": m.time_usec, "parts": [None, None]}
+            p["parts"][part] = list(m.data[:58])
+            if None not in p["parts"]:
+                spectra[sensor].append(p["parts"][0] + p["parts"][1])
+                del pending[sensor]
+
+        for sensor in (0, 1):
+            count = len(spectra[sensor])
+            # four spectra a second
+            if count < 30:
+                raise NotAchievedException("%s: %u spectra in 10 s" % (names[sensor], count))
+            db = spectra[sensor][-1]
+            peak = max(range(len(db)), key=lambda i: db[i])
+            peak_hz = (peak + 1) * df
+            median = sorted(db)[len(db) // 2]
+            self.progress("%s: %u spectra, peak %.1f dB at %.1f Hz, median %.1f dB" %
+                          (names[sensor], count, db[peak], peak_hz, median))
+            if abs(peak_hz - vib_hz) > 2 * df:
+                raise NotAchievedException("%s: peak at %.1f Hz, want %.1f Hz" % (names[sensor], peak_hz, vib_hz))
+            if db[peak] - median < 20:
+                raise NotAchievedException("%s: peak %.1f dB over the median" % (names[sensor], db[peak] - median))
+
+        self.set_parameter("INS_FFT_LIVE", 0)
+        self.assert_not_receiving_message('DEBUG_FLOAT_ARRAY', timeout=2)
+        self.zero_throttle()
+        self.disarm_vehicle(force=True)
+        self.reboot_sitl()
+
     def TerrainMission(self):
         '''Test terrain following in mission'''
         self.install_terrain_handlers_context()
@@ -11095,6 +11154,7 @@ return update()
             self.MicroStrainEAHRS7,
             self.EKF_STATUS_REPORT,
             self.AirspeedDrivers,
+            self.FFTLive,
             self.IMUTempCal,
             self.AutoLandMode,
             self.AHRSTrim,
