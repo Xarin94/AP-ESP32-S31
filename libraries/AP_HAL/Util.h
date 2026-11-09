@@ -204,6 +204,10 @@ public:
     // get the system load
     virtual bool get_system_load(float& avg_load, float& peak_load) const { return false; }
 
+    // load of one CPU core (0..1) over the last second, from its idle time;
+    // false for a core that does not exist or is not measured
+    virtual bool get_core_load(uint8_t core, float &load) const { return false; }
+
 #if HAL_ENABLE_DFU_BOOT
     virtual void boot_to_dfu(void) {}
 #endif
