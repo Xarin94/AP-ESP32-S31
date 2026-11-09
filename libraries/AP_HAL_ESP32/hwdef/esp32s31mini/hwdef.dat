@@ -1,0 +1,113 @@
+# MINI AHRS board V1.2 — ESP32-S31-WROOM-1-N16R16V
+#
+# Sensors on one SPI bus: SCH16T IMU, RM3100 magnetometer, 2x BMP581,
+# ELVH-L02D differential pressure. No PWM outputs.
+#
+# Module pins not available (datasheet S31): GPIO26-28/30-32 flash,
+# GPIO29/41 not bonded, GPIO33/34 USB Serial/JTAG, GPIO36/37/60/61 strapping.
+
+define HAL_ESP32_BOARD_NAME "esp32s31mini"
+
+# Dual core layout (HP CPU0 / HP CPU1):
+#  core 0: main loop (vehicle code, AHRS/EKF3), timer and UART threads, SPI
+#          bus thread (SCH16T at 1 kHz, baros, compass)
+#  core 1: Wi-Fi/lwIP, IO, storage, RC and library threads
+define HAL_ESP32_FASTCPU 0
+define HAL_ESP32_SLOWCPU 1
+define HAL_ESP32_DEVICE_BUS_CPU 0
+define HAL_ESP32_THREAD_CPU 1
+
+# SPI Buses
+#            Host      DMA Channel     MOSI        MISO        SCLK
+ESP32_SPIBUS SPI2_HOST SPI_DMA_CH_AUTO GPIO_NUM_21 GPIO_NUM_22 GPIO_NUM_20
+
+# SPI Devices (chip selects are driven by the HAL; every device on the bus is
+# listed so its CS is deasserted before the bus is used). ESP-IDF takes at
+# most 6 devices per host and a device with two speeds counts twice: the
+# BMP581 has one speed, 1 MHz on the shared bus (a 50 Hz read of a few
+# bytes; the part takes up to 12 MHz)
+#            Name      Bus Device ChipSel      Mode LoSpeed  HiSpeed
+ESP32_SPIDEV sch16t    0   0      GPIO_NUM_25  0    1*MHZ    8*MHZ
+ESP32_SPIDEV bmp581_1  0   1      GPIO_NUM_23  0    1*MHZ    1*MHZ
+ESP32_SPIDEV bmp581_2  0   2      GPIO_NUM_24  0    1*MHZ    1*MHZ
+# the CSmag line (IO18) reads 0 V at the module: the RM3100 CS is wired to the
+# unused airspeed CS (IO38, with its 10k pull-up) on this board
+ESP32_SPIDEV rm3100    0   3      GPIO_NUM_38  0    1*MHZ    1*MHZ
+ESP32_SPIDEV elvh      0   4      GPIO_NUM_18  0    500*KHZ  500*KHZ
+
+# SCH16T variant mounted on the board (K10 by default; the V1.2 schematic
+# lists SCH16T-K01-10):
+#   1  = SCH16T-K01, high precision, +-300 deg/s, +-8 g
+#   10 = SCH16T-K10, +-2000 deg/s, +-16 g
+define HAL_SCH16T_VARIANT 10
+
+# SCH16T: EXTRESN on GPIO17 (active low), DRY_SYNC on GPIO19 (unused: Data
+# Ready covers only the decimated outputs, the driver reads the interpolated
+# ones and stamps each sample at the read)
+define HAL_SCH16T_RESET_PIN 17
+# SCH16T internal low pass: LPF0, 68 Hz Butterworth 4th order on every axis
+# (the part default; datasheet minimum read rate 500 Hz), 66 dB down at the
+# ~450 Hz Nyquist of the 1 kHz read
+define HAL_SCH16T_LPF_CODE 0x000
+define HAL_SCH16T_SAMPLE_RATE 1000
+
+# sensor axes: SCH16T x, -y, -z; the RM3100 module sits upside down under the
+# board (x, -y, -z), from a reading level and facing north
+IMU SCH16T SPI:sch16t ROTATION_ROLL_180
+define HAL_INS_DEFAULT HAL_INS_NONE
+
+COMPASS RM3100 SPI:rm3100 false ROTATION_ROLL_180
+define AP_COMPASS_RM3100_ENABLED 1
+define AP_COMPASS_PROBING_ENABLED 0
+
+# to read only one barometer remove the second BARO line; keep its
+# ESP32_SPIDEV line, so its chip select stays high
+BARO BMP581 SPI:bmp581_1
+BARO BMP581 SPI:bmp581_2
+define AP_BARO_BMP581_ENABLED 1
+
+# airspeed: ELVH-L02D-HRRD-C-NSA4 on SPI:elvh (+-2 inH2O, transfer function
+# A). ArduPlane: ARSPD_TYPE 21 and ARSPD_ELVH_RNG 3 (L02D) by default;
+# another part needs only ARSPD_ELVH_RNG. Other vehicles: ARSPD_TYPE 0, the
+# sensor is not read (set 21 to log it)
+define HAL_AIRSPEED_TYPE_DEFAULT (APM_BUILD_TYPE(APM_BUILD_ArduPlane) ? 21 : 0)
+define HAL_AIRSPEED_ELVH_RNG_DEFAULT 3
+
+# Serial ports. The HAL maps the entries as
+#   [0] -> SERIAL0, [1] -> SERIAL3, [2] -> SERIAL2; SERIAL1 is Wi-Fi
+#            PORT             RXPIN        TXPIN
+ESP32_SERIAL USB_SERIAL_JTAG  GPIO_NUM_NC  GPIO_NUM_NC
+# on the V1.2 board the connectors are not on the schematic pins: S1 is IO8/IO9
+# and S2 IO10/IO11, found by joining R and T on each connector. The pin marked
+# R is IO8 and IO10, measured by grounding it, and is the board RX: a u-blox TX
+# on R of S1 is received on IO8. R goes to the TX of the device
+ESP32_SERIAL UART_NUM_1       GPIO_NUM_8   GPIO_NUM_9
+ESP32_SERIAL UART_NUM_2       GPIO_NUM_10  GPIO_NUM_11
+
+# 3 ms per loop for the GCS: with the default the streams ran at 0.5 Hz
+define PLANE_GCS_SEND_TIME_US 3000
+
+# the USB lines must not reset the chip: telemetry held for an hour with this
+define HAL_ESP32_USB_NO_CHIP_RESET 1
+
+# MAVLink over Wi-Fi UDP (SERIAL1): access point, 192.168.4.1:14550
+define HAL_ESP32_WIFI 2
+define WIFI_SSID "ardupilot-s31"
+define WIFI_PWD "ardupilot1"
+
+# no CAN: on the V1.2 board TXD and RXD of the MCP2542FD reach no readable GPIO
+
+# no PWM outputs and no RC input pin: RC comes from a serial protocol
+# (CRSF/ELRS/SBUS on SERIAL2/3)
+
+# status LEDs, active high: LED1 start-up, LED2 GPS fix and position. The V1.2
+# board has them on IO13 and IO12, not on IO14 and IO15 as in the schematic
+define AP_NOTIFY_GPIO_LED_INIT_GPS_ENABLED 1
+define HAL_GPIO_A_LED_PIN 13
+define HAL_GPIO_B_LED_PIN 12
+define HAL_GPIO_LED_ON 1
+
+# no SD card: no logging
+define HAL_LOGGING_ENABLED 0
+define AP_FILESYSTEM_ESP32_ENABLED 0
+define AP_SCRIPTING_ENABLED 0
