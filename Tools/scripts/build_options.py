@@ -514,6 +514,7 @@ BUILD_OPTIONS = [
     Feature('Airspeed Drivers', 'SDP3X', 'AP_AIRSPEED_SDP3X_ENABLED', 'Enable SDP3X AIRSPEED', 0, 'AIRSPEED'),
     Feature('Airspeed Drivers', 'DRONECAN_ASPD', 'AP_AIRSPEED_DRONECAN_ENABLED', 'Enable DroneCAN AIRSPEED', 0, 'AIRSPEED,DroneCAN'),   # NOQA: E501
     Feature('Airspeed Drivers', 'AUAV_AIRSPEED', 'AP_AIRSPEED_AUAV_ENABLED', 'ENABLE AUAV AIRSPEED', 0, 'AIRSPEED'),
+    Feature('Airspeed Drivers', 'ELVH', 'AP_AIRSPEED_ELVH_ENABLED', 'Enable ELVH SPI AIRSPEED', 0, 'AIRSPEED'),
 
     Feature('Actuators', 'ServoTelem', 'AP_SERVO_TELEM_ENABLED', 'Enable servo telemetry library', 0, None),
     Feature('Actuators', 'Volz', 'AP_VOLZ_ENABLED', 'Enable Volz Protocol', 0, None),
