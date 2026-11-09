@@ -4,6 +4,8 @@ ArduPilot (standard EKF3) ported to the **ESP32-S31** with ESP-IDF 6.1, for the 
 
 Build, flashing, pinout and configuration: [libraries/AP_HAL_ESP32/hwdef/esp32s31mini/README.md](libraries/AP_HAL_ESP32/hwdef/esp32s31mini/README.md).
 
+Live vibration spectrum of the IMU over telemetry: [libraries/AP_InertialSensor/FFT_LIVE.md](libraries/AP_InertialSensor/FFT_LIVE.md).
+
 ```sh
 ./waf configure --board esp32s31mini
 ./waf plane
