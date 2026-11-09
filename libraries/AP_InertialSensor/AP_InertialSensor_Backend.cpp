@@ -633,6 +633,14 @@ void AP_InertialSensor_Backend::_notify_new_accel_raw_sample(uint8_t instance,
         _imu._new_accel_data[instance] = true;
     }
 
+#if AP_INERTIALSENSOR_SPECTRUM_ENABLED
+    // live vibration spectrum (INS_FFT_LIVE); the gyro sample of the same
+    // read was notified just before
+    if (dt > 0) {
+        _imu.spectrum_push(instance, accel, sample_us);
+    }
+#endif
+
     // 5us
 #if AP_INERTIALSENSOR_BATCHSAMPLER_ENABLED
     if (!_imu.batchsampler.doing_post_filter_logging()) {

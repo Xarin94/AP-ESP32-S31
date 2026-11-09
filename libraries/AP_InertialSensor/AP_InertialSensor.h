@@ -78,6 +78,7 @@
 #endif
 
 class AP_InertialSensor_Backend;
+class AP_InertialSensor_Spectrum;
 class AuxiliaryBus;
 class AP_AHRS;
 class FastRateBuffer;
@@ -809,6 +810,18 @@ private:
 
 #if AP_INERTIALSENSOR_KILL_IMU_ENABLED
     uint8_t imu_kill_mask;
+#endif
+
+#if AP_INERTIALSENSOR_SPECTRUM_ENABLED
+    // live vibration spectrum for the GCS (INS_FFT_LIVE), created at the
+    // first enable
+    AP_Int8 _fft_live;
+    AP_InertialSensor_Spectrum *_spectrum;
+    bool _spectrum_failed;
+    void update_spectrum();
+    // backend thread: one calibrated, body-frame accel sample, after the
+    // gyro sample of the same read
+    void spectrum_push(uint8_t instance, const Vector3f &accel, uint64_t sample_us);
 #endif
 
 #if HAL_INS_TEMPERATURE_CAL_ENABLE

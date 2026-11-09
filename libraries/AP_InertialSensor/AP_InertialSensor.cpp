@@ -44,6 +44,7 @@
 #include <AP_Scheduler/AP_Scheduler.h>
 #include "AP_InertialSensor_ZeroOne_FPGA_SCH16T.h"
 #include "AP_InertialSensor_SCH16T.h"
+#include "AP_InertialSensor_Spectrum.h"
 
 /* Define INS_TIMING_DEBUG to track down scheduling issues with the main loop.
  * Output is on the debug console. */
@@ -702,6 +703,15 @@ const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
 
     // indexes 57 and 58 used by INS_HNTC3 and INS_HNTC4
 
+#if AP_INERTIALSENSOR_SPECTRUM_ENABLED
+    // @Param: _FFT_LIVE
+    // @DisplayName: Live IMU vibration spectrum
+    // @Description: Sends the vibration spectrum of the first usable IMU to the GCS, gyro and accelerometer, four times a second as DEBUG_FLOAT_ARRAY messages named FFT_GYRO and FFT_ACC (about 4.2 kB/s on each link), see FFT_LIVE.md. Computed in a thread at the lowest priority, which starts at the first enable and runs until reboot; 0 stops the messages.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("_FFT_LIVE", 59, AP_InertialSensor, _fft_live, 0),
+#endif
+
     /*
       NOTE: parameter indexes have gaps above. When adding new
       parameters check for conflicts carefully
@@ -710,6 +720,42 @@ const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
 };
 
 AP_InertialSensor *AP_InertialSensor::_singleton = nullptr;
+
+#if AP_INERTIALSENSOR_SPECTRUM_ENABLED
+// backend thread
+void AP_InertialSensor::spectrum_push(uint8_t instance, const Vector3f &accel, uint64_t sample_us)
+{
+    if (instance != _first_usable_accel) {
+        return;
+    }
+    AP_InertialSensor_Spectrum *spectrum = __atomic_load_n(&_spectrum, __ATOMIC_ACQUIRE);
+    if (spectrum != nullptr) {
+        spectrum->push(_last_raw_gyro[instance], accel, sample_us);
+    }
+}
+
+// main thread, every loop
+void AP_InertialSensor::update_spectrum()
+{
+    if (_fft_live.get() == 0) {
+        return;
+    }
+    if (_spectrum == nullptr && !_spectrum_failed) {
+        AP_InertialSensor_Spectrum *spectrum = NEW_NOTHROW AP_InertialSensor_Spectrum();
+        if (spectrum == nullptr || !spectrum->init()) {
+            // no thread is running when init fails
+            delete spectrum;
+            _spectrum_failed = true;
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "INS: no memory for the FFT");
+            return;
+        }
+        __atomic_store_n(&_spectrum, spectrum, __ATOMIC_RELEASE);
+    }
+    if (_spectrum != nullptr) {
+        _spectrum->send();
+    }
+}
+#endif  // AP_INERTIALSENSOR_SPECTRUM_ENABLED
 
 AP_InertialSensor::AP_InertialSensor() :
     _board_orientation(ROTATION_NONE),
@@ -1994,6 +2040,10 @@ void AP_InertialSensor::update(void)
     _last_update_usec = AP_HAL::micros();
     
     _have_sample = false;
+
+#if AP_INERTIALSENSOR_SPECTRUM_ENABLED
+    update_spectrum();
+#endif
 
 #if HAL_INS_TEMPERATURE_CAL_ENABLE
     if (tcal_learning && !temperature_cal_running()) {
