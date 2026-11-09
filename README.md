@@ -1,15 +1,15 @@
 # AP-ESP32-S31
 
-ArduPilot (EKF3 standard) portato su **ESP32-S31** con ESP-IDF 6.1, per la scheda MINI AHRS: board `esp32s31mini`, branch `esp32s31`.
+ArduPilot (standard EKF3) ported to the **ESP32-S31** with ESP-IDF 6.1, for the MINI AHRS board: board `esp32s31mini`, branch `esp32s31`.
 
-Build, flash, pinout e configurazione: [libraries/AP_HAL_ESP32/hwdef/esp32s31mini/README.md](libraries/AP_HAL_ESP32/hwdef/esp32s31mini/README.md).
+Build, flashing, pinout and configuration: [libraries/AP_HAL_ESP32/hwdef/esp32s31mini/README.md](libraries/AP_HAL_ESP32/hwdef/esp32s31mini/README.md).
 
 ```sh
 ./waf configure --board esp32s31mini
 ./waf plane
 ```
 
-Il resto di questo file è il README originale di ArduPilot.
+The rest of this file is the original ArduPilot README.
 
 # ArduPilot Project
 
