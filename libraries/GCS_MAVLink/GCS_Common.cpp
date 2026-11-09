@@ -6024,13 +6024,23 @@ void GCS_MAVLINK::send_sys_status()
     const uint16_t dropped_logmessage_count = UINT16_MAX;
 #endif  // HAL_LOGGING_ENABLED
 
+#if AP_SCHEDULER_ENABLED
+    // main loop load, or the busiest core where the HAL measures it from the
+    // idle time (threads outside the main loop, more than one core)
+    float load = AP::scheduler().load_average();
+    float cpu_load, cpu_peak;
+    if (hal.util->get_system_load(cpu_load, cpu_peak)) {
+        load = MAX(load, cpu_load);
+    }
+#endif
+
     mavlink_msg_sys_status_send(
         chan,
         control_sensors_present,
         control_sensors_enabled,
         control_sensors_health,
 #if AP_SCHEDULER_ENABLED
-        static_cast<uint16_t>(AP::scheduler().load_average() * 1000),
+        static_cast<uint16_t>(load * 1000),
 #else
         0,
 #endif
@@ -6901,10 +6911,19 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
         break;
 #endif
 
-    case MSG_SYS_STATUS:
+    case MSG_SYS_STATUS: {
         CHECK_PAYLOAD_SIZE(SYS_STATUS);
         send_sys_status();
+        // load of each core, where the HAL measures it
+        static const char *const core_names[] { "CPU0", "CPU1" };
+        for (uint8_t i = 0; i < ARRAY_SIZE(core_names); i++) {
+            float core_load;
+            if (hal.util->get_core_load(i, core_load) && HAVE_PAYLOAD_SPACE(chan, NAMED_VALUE_FLOAT)) {
+                send_named_float(core_names[i], core_load * 100);
+            }
+        }
         break;
+    }
 
 #if AP_AHRS_ENABLED
     case MSG_AHRS2:
