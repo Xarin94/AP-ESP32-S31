@@ -51,6 +51,9 @@ public:
 #if AP_AIRSPEED_AUTOCAL_ENABLE
     AP_Int8  autocal;
 #endif
+#if AP_AIRSPEED_ELVH_ENABLED
+    AP_Int8  elvh_rng;
+#endif
 
     static const struct AP_Param::GroupInfo var_info[];
 };
@@ -233,6 +236,9 @@ public:
 #if AP_AIRSPEED_SCRIPTING_ENABLED
         TYPE_SCRIPTING=20,
 #endif  // AP_AIRSPEED_SCRIPTING_ENABLED
+#if AP_AIRSPEED_ELVH_ENABLED
+        TYPE_SPI_ELVH=21,
+#endif  // AP_AIRSPEED_ELVH_ENABLED
 #if AP_AIRSPEED_SITL_ENABLED
         TYPE_SITL=100,
 #endif  // AP_AIRSPEED_SITL_ENABLED

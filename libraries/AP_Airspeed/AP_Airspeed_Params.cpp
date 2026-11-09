@@ -36,13 +36,17 @@
 #define PSI_RANGE_DEFAULT 1.0f
 #endif
 
+#ifndef HAL_AIRSPEED_ELVH_RNG_DEFAULT
+#define HAL_AIRSPEED_ELVH_RNG_DEFAULT 0
+#endif
+
 // table of user settable parameters
 const AP_Param::GroupInfo AP_Airspeed_Params::var_info[] = {
 
     // @Param: TYPE
     // @DisplayName: Airspeed type
     // @Description: Type of airspeed sensor
-    // @Values: 0:None,1:I2C-MS4525D0,2:Analog,3:I2C-MS5525,4:I2C-MS5525 (0x76),5:I2C-MS5525 (0x77),6:I2C-SDP3X,7:I2C-DLVR-5in,8:DroneCAN,9:I2C-DLVR-10in,10:I2C-DLVR-20in,11:I2C-DLVR-30in,12:I2C-DLVR-60in,13:NMEA water speed,14:MSP,15:ASP5033,16:ExternalAHRS,17:AUAV-10in,18:AUAV-5in,19:AUAV-30in,20:Scripting,100:SITL
+    // @Values: 0:None,1:I2C-MS4525D0,2:Analog,3:I2C-MS5525,4:I2C-MS5525 (0x76),5:I2C-MS5525 (0x77),6:I2C-SDP3X,7:I2C-DLVR-5in,8:DroneCAN,9:I2C-DLVR-10in,10:I2C-DLVR-20in,11:I2C-DLVR-30in,12:I2C-DLVR-60in,13:NMEA water speed,14:MSP,15:ASP5033,16:ExternalAHRS,17:AUAV-10in,18:AUAV-5in,19:AUAV-30in,20:Scripting,21:SPI-ELVH,100:SITL
     // @RebootRequired: True
     // @User: Standard
     AP_GROUPINFO_FLAGS("TYPE", 1, AP_Airspeed_Params, type, 0, AP_PARAM_FLAG_ENABLE),
@@ -128,6 +132,16 @@ const AP_Param::GroupInfo AP_Airspeed_Params::var_info[] = {
     // @ReadOnly: True
     // @User: Advanced
     AP_GROUPINFO_FLAGS("DEVID", 11, AP_Airspeed_Params, bus_id, 0, AP_PARAM_FLAG_INTERNAL_USE_ONLY),
+
+#if AP_AIRSPEED_ELVH_ENABLED
+    // @Param: ELVH_RNG
+    // @DisplayName: ELVH pressure range
+    // @Description: Pressure range code of the ELVH sensor (ARSPD_TYPE 21), as in its order code (ELVH-L02D-...). It sets the full scale of the sensor. 0 takes the full scale from ARSPD_PSI_RANGE.
+    // @Values: 0:ARSPD_PSI_RANGE,1:F50D (+-0.5 inH2O),2:L01D (+-1 inH2O),3:L02D (+-2 inH2O),4:L04D (+-4 inH2O),5:L05D (+-5 inH2O),6:L10D (+-10 inH2O),7:L20D (+-20 inH2O),8:L30D (+-30 inH2O),9:L60D (+-60 inH2O),10:MF25D (+-2.5 mbar),11:MF12D (+-12.5 mbar),12:M025D (+-25 mbar),13:M050D (+-50 mbar),14:M075D (+-75 mbar),15:M100D (+-100 mbar),16:M160D (+-160 mbar),17:M250D (+-250 mbar)
+    // @RebootRequired: True
+    // @User: Advanced
+    AP_GROUPINFO("ELVH_RNG", 12, AP_Airspeed_Params, elvh_rng, HAL_AIRSPEED_ELVH_RNG_DEFAULT),
+#endif
 
     AP_GROUPEND
 };

@@ -53,6 +53,7 @@
 #include "AP_Airspeed_NMEA.h"
 #include "AP_Airspeed_MSP.h"
 #include "AP_Airspeed_AUAV.h"
+#include "AP_Airspeed_ELVH.h"
 #include "AP_Airspeed_External.h"
 #include "AP_Airspeed_Scripting.h"
 #include "AP_Airspeed_SITL.h"
@@ -481,6 +482,11 @@ void AP_Airspeed::allocate()
             sensor[i] = NEW_NOTHROW AP_Airspeed_Scripting(*this, i);
             break;
 #endif  // AP_AIRSPEED_SCRIPTING_ENABLED
+#if AP_AIRSPEED_ELVH_ENABLED
+        case TYPE_SPI_ELVH:
+            sensor[i] = NEW_NOTHROW AP_Airspeed_ELVH(*this, i);
+            break;
+#endif  // AP_AIRSPEED_ELVH_ENABLED
         }
         if (sensor[i] && !sensor[i]->init()) {
             GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "Airspeed %u init failed", i + 1);

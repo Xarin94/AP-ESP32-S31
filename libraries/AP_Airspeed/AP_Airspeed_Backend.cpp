@@ -48,6 +48,13 @@ float AP_Airspeed_Backend::get_psi_range(void) const
     return frontend.param[instance].psi_range;
 }
 
+#if AP_AIRSPEED_ELVH_ENABLED
+uint8_t AP_Airspeed_Backend::get_elvh_range(void) const
+{
+    return frontend.param[instance].elvh_rng;
+}
+#endif
+
 uint8_t AP_Airspeed_Backend::get_bus(void) const
 {
     return frontend.param[instance].bus;

@@ -60,6 +60,11 @@
 #define AP_AIRSPEED_AUAV_ENABLED AP_AIRSPEED_BACKEND_DEFAULT_ENABLED
 #endif
 
+// SPI sensor: only useful on boards declaring the "elvh" SPI device
+#ifndef AP_AIRSPEED_ELVH_ENABLED
+#define AP_AIRSPEED_ELVH_ENABLED AP_AIRSPEED_BACKEND_DEFAULT_ENABLED && HAL_PROGRAM_SIZE_LIMIT_KB > 1024
+#endif
+
 // other AP_Airspeed options:
 #ifndef AIRSPEED_MAX_SENSORS
 #define AIRSPEED_MAX_SENSORS 2

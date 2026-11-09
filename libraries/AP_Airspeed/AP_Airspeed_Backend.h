@@ -72,6 +72,9 @@ public:
 protected:
     int8_t get_pin(void) const;
     float get_psi_range(void) const;
+#if AP_AIRSPEED_ELVH_ENABLED
+    uint8_t get_elvh_range(void) const;
+#endif
     uint8_t get_bus(void) const;
     bool bus_is_configured(void) const;
     uint8_t get_instance(void) const {
@@ -129,6 +132,7 @@ protected:
         ASP5033  = 0x0A,
         AUAV     = 0x0B,
         SCRIPTING = 0x0C,
+        ELVH     = 0x0D,
     };
     
 private:
