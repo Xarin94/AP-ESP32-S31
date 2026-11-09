@@ -96,6 +96,24 @@ define HAL_SCH16T_SAMPLE_RATE 1000   # letture al secondo
 
 Il codice ripete tre volte (3 bit per asse) il filtro: `000` 68 Hz, `001` 30 Hz, `010` 13 Hz, `011` 280 Hz, `100` 370 Hz, `101` 235 Hz (per esempio 30 Hz su tutti gli assi è `0x049`). Il datasheet chiede almeno 500 Hz di lettura con 68 Hz, 1000 Hz con 235 e 280 Hz, 2000 Hz con 370 Hz. Il driver legge le uscite interpolate con 7 frame SPI in pipeline, controlla CRC e stato di ogni frame e pubblica la temperatura a 10 Hz.
 
+### Rumori EKF3 (SCH16T-K10, RM3100)
+
+EKF3 usa i rumori di processo come deviazione standard per passo di predizione divisa per il passo: varianza per passo = (dt · NSE)². Un rumore bianco di densità N dà varianza N² · dt, quindi NSE = N / √dt. Un offset che deriva come random walk di σ in un tempo T dà NSE = σ / (√T · √dt). I valori sotto sono calcolati con dt = 12 ms (`EKF_TARGET_DT`); Plane e Rover, con il loop a 50 Hz, predicono ogni 20 ms e con gli stessi parametri hanno una varianza al secondo 1,67 volte più grande, cioè più prudente.
+
+| Parametro | Dato del sensore | Solo sensore | Default EKF3 | In `defaults.parm` |
+|---|---|---|---|---|
+| `EK3_GYRO_P_NSE` (rad/s) | K10: 6 m°/s/√Hz | 9,6·10⁻⁴ | 1,5·10⁻² | default |
+| `EK3_ACC_P_NSE` (m/s²) | K10: 0,8 mm/s²/√Hz | 7,3·10⁻³ | 0,35 | default |
+| `EK3_GBIAS_P_NSE` (rad/s²) | K10: deriva dell'offset gyro 0,015 °/s/min max, 1σ = max/3 | 1,0·10⁻⁴ | 1·10⁻³ | 1·10⁻⁴ |
+| `EK3_ABIAS_P_NSE` (m/s³) | K10: deriva dell'offset accel 0,002 m/s²/min max, 1σ = max/3 | 7,9·10⁻⁴ | 2·10⁻² | 8·10⁻⁴ |
+| `EK3_MAG_M_NSE` (Gauss) | RM3100 a cycle count 200 (quello del driver): 15 nT | 1,5·10⁻⁴ | 0,05 | default |
+
+- **Offset (GBIAS, ABIAS).** Il punto di forza del K10 è la stabilità degli offset: il random walk dal datasheet è 10 volte (gyro) e 25 volte (accel) sotto i default di EKF3, che sono il massimo del loro range. Con questi valori EKF3 impara gli offset più lentamente e con meno rumore. Un offset che cambia più in fretta del previsto resta coperto da `EK3_GYRO_P_NSE` e `EK3_ACC_P_NSE`, lasciati ai default.
+- **Rumore bianco (GYRO, ACC).** Il rumore bianco del K10 è della stessa classe dei MEMS comuni per cui sono tarati i default di EKF3. I default stanno circa 15 volte (gyro) e 50 volte (accel) sopra il valore del solo sensore: è il margine per vibrazioni, saturazioni, errori di scala e di tempo, che dipendono dall'installazione e non dal datasheet. Valori con margine 5× e 4× sarebbero 4,8·10⁻³ e 2,9·10⁻². Vanno provati solo guardando le innovazioni in telemetria (`EKF_STATUS_REPORT`, rapporti sotto 1, prima a terra e poi in volo): la scheda non ha log.
+- **Bussola (MAG_M_NSE).** I 15 nT dell'RM3100 sono 70 volte sotto il minimo che EKF3 accetta nella fusione (0,01 Gauss). L'errore della misura viene dal residuo di calibrazione (`COMPASS_CAL_FIT` accetta fino a 16 mGauss) e dalle correnti vicine alla bussola, cioè dall'installazione. Con una calibrazione buona (fit sotto 5 mGauss) e senza disturbi di corrente si può provare 0,02.
+
+Sono valori per il K10. Per il K01 il datasheet completo non era disponibile.
+
 ### Bus SPI
 
 - ESP-IDF accetta al massimo 6 dispositivi per host SPI, e una riga `ESP32_SPIDEV` con `LoSpeed` diverso da `HiSpeed` ne occupa due. Oggi: SCH16T 2, BMP581 1 + 1, RM3100 1, ELVH 1 = 6. Un dispositivo in più ferma l'avvio con `SPI: no room for <nome> on its bus`.

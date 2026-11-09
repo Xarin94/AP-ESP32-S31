@@ -4,3 +4,8 @@
 SERIAL3_PROTOCOL 5
 SERIAL3_BAUD 460
 GPS_AUTO_CONFIG 0
+# EKF3: random walk of the SCH16T-K10 offsets, from the datasheet drift
+# (README.md, "Rumori EKF3"); the white noise and compass terms keep the
+# EKF3 defaults
+EK3_GBIAS_P_NSE 0.0001
+EK3_ABIAS_P_NSE 0.0008
