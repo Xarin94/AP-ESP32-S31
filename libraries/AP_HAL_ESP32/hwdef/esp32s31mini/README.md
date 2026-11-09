@@ -20,6 +20,10 @@ git submodule update --init --recursive
 
 Run `./waf configure` again after every change to `hwdef.dat`. The images are in `build/esp32s31mini/esp-idf_build/`: `bootloader/bootloader.bin`, `partition_table/partition-table.bin`, `ardupilot.bin`.
 
+## Prebuilt firmware
+
+[`firmware/plane`](firmware/plane) and [`firmware/rover`](firmware/rover) hold ready-to-flash images, built from commit `bc48764` (ArduPlane / ArduRover V4.8.0-dev) with ESP-IDF v6.1: `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. They are not a release and are not rebuilt automatically: a later commit may change the code without changing them.
+
 ## Flashing
 
 Over USB (USB-C connector, USB Serial/JTAG of the ESP32-S31). On the board's USB link only `--no-stub` at 115200 baud works:
