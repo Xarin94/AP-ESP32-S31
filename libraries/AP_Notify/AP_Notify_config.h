@@ -55,6 +55,11 @@
 #define AP_NOTIFY_GPIO_LED_2_ENABLED 0
 #endif
 
+// two LEDs: start-up state and GPS lock/absolute position
+#ifndef AP_NOTIFY_GPIO_LED_INIT_GPS_ENABLED
+#define AP_NOTIFY_GPIO_LED_INIT_GPS_ENABLED 0
+#endif
+
 #ifndef AP_NOTIFY_GPIO_LED_1_ENABLED
 #define AP_NOTIFY_GPIO_LED_1_ENABLED 0
 #endif

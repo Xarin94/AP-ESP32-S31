@@ -39,6 +39,7 @@
 #include "SITL_SFML_LED.h"
 #include <stdio.h>
 #include "AP_BoardLED2.h"
+#include "AP_BoardLED_InitGPS.h"
 #include "ProfiLED.h"
 #include "ScriptingLED.h"
 #include "DShotLED.h"
@@ -279,6 +280,8 @@ void AP_Notify::add_backends(void)
                 ADD_BACKEND(NEW_NOTHROW AP_BoardLED());
 #elif AP_NOTIFY_GPIO_LED_2_ENABLED
                 ADD_BACKEND(NEW_NOTHROW AP_BoardLED2());
+#elif AP_NOTIFY_GPIO_LED_INIT_GPS_ENABLED
+                ADD_BACKEND(NEW_NOTHROW AP_BoardLED_InitGPS());
 #endif
 #if AP_NOTIFY_GPIO_LED_1_ENABLED
                 ADD_BACKEND(NEW_NOTHROW GPIO_LED_1());
