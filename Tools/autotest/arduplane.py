@@ -3188,14 +3188,19 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
     def AirspeedDrivers(self):
         '''Test AirSpeed drivers'''
         airspeed_sensors = [
-            ("MS5525", 3, 1),
-            ("DLVR", 7, 2),
-            ("SITL", 100, 0),
+            ("MS5525", 3, 1, {}),
+            ("DLVR", 7, 2, {}),
+            ("SITL", 100, 0, {}),
+            # simulated ELVH-L04D on SPI: +-4 inH2O, by part code and by
+            # ARSPD_PSI_RANGE
+            ("ELVH", 21, None, {"ARSPD2_ELVH_RNG": 4}),
+            ("ELVH", 21, None, {"ARSPD2_ELVH_RNG": 0, "ARSPD2_PSI_RANGE": 0.1444}),
         ]
-        for (name, t, bus) in airspeed_sensors:
+        for (name, t, bus, params) in airspeed_sensors:
             self.context_push()
             if bus is not None:
                 self.set_parameter("ARSPD2_BUS", bus)
+            self.set_parameters(params)
             self.set_parameter("ARSPD2_TYPE", t)
             self.reboot_sitl()
             self.wait_ready_to_arm()
