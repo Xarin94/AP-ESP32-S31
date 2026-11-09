@@ -19,6 +19,11 @@
 #include <AP_HAL_Empty/AP_HAL_Empty_Namespace.h>
 #include <AP_HAL_ESP32/HAL_ESP32_Namespace.h>
 
+#if HAL_NUM_CAN_IFACES > 0
+#include <AP_HAL_ESP32/CANIface.h>
+typedef ESP32::CANIface HAL_CANIface;
+#endif
+
 class HAL_ESP32 : public AP_HAL::HAL
 {
 public:

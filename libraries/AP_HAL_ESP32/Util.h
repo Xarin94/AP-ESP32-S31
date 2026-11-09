@@ -74,6 +74,11 @@ private:
       get system clock in UTC microseconds
      */
     uint64_t get_hw_rtc() const override;
+
+    // CPU load from the idle time of each core: the system load is the
+    // busiest core, as many threads run outside the main loop
+    bool get_system_load(float& avg_load, float& peak_load) const override;
+    bool get_core_load(uint8_t core, float &load) const override;
 #if !defined(HAL_NO_FLASH_SUPPORT) && !defined(HAL_NO_ROMFS_SUPPORT)
     FlashBootloader flash_bootloader() override;
 #endif
@@ -81,4 +86,14 @@ private:
     // stm32F4 and F7 have 20 total RTC backup registers. We use the first one for boot type
     // flags, so 19 available for persistent data
     static_assert(sizeof(persistent_data) <= 19*4, "watchdog persistent data too large");
+
+private:
+    // per-core idle time sampled at most once a second (main thread)
+    static const uint8_t MAX_CORES = 2;
+    void update_core_load() const;
+    mutable uint32_t _load_sample_us;
+    mutable uint32_t _idle_us[MAX_CORES];
+    mutable float _core_load[MAX_CORES];
+    mutable float _peak_load;
+    mutable bool _load_valid;
 };

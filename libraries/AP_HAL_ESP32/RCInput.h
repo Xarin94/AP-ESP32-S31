@@ -22,6 +22,10 @@
 
 #include "RmtSigReader.h"
 
+#if defined(HAL_ESP32_RCIN) && !HAL_ESP32_HAVE_LEGACY_RMT
+#error "HAL_ESP32_RCIN needs the legacy RMT driver (ESP-IDF < 6): use a serial RC protocol"
+#endif
+
 #ifndef RC_INPUT_MAX_CHANNELS
 #define RC_INPUT_MAX_CHANNELS 18
 #endif
@@ -61,5 +65,7 @@ private:
 
     bool pulse_input_enabled;
 
+#ifdef HAL_ESP32_RCIN
     ESP32::RmtSigReader sig_reader;
+#endif
 };

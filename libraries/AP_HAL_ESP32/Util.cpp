@@ -36,6 +36,8 @@
 #include <AP_Common/ExpandingString.h>
 
 #include "esp_mac.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 extern const AP_HAL::HAL& hal;
 
@@ -220,6 +222,57 @@ bool Util::was_watchdog_reset() const
 /*
   display stack usage as text buffer for @SYS/threads.txt
  */
+// idle time of each core over the last second; the run time counters are
+// in esp_timer microseconds (CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER)
+void Util::update_core_load() const
+{
+#if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
+    const uint32_t now_us = (uint32_t)esp_timer_get_time();
+    const uint32_t dt_us = now_us - _load_sample_us;
+    if (_load_sample_us != 0 && dt_us < 1000000U) {
+        return;
+    }
+    const uint8_t cores = MIN(MAX_CORES, (uint8_t)CONFIG_FREERTOS_NUMBER_OF_CORES);
+    for (uint8_t c = 0; c < cores; c++) {
+        const uint32_t idle_us = ulTaskGetIdleRunTimeCounterForCore(c);
+        if (_load_sample_us != 0) {
+            _core_load[c] = constrain_float(1.0f - (idle_us - _idle_us[c]) / (float)dt_us, 0, 1);
+            _peak_load = MAX(_peak_load, _core_load[c]);
+        }
+        _idle_us[c] = idle_us;
+    }
+    _load_valid = _load_sample_us != 0;
+    _load_sample_us = now_us;
+#endif
+}
+
+bool Util::get_core_load(uint8_t core, float &load) const
+{
+    update_core_load();
+    if (!_load_valid || core >= MIN(MAX_CORES, (uint8_t)CONFIG_FREERTOS_NUMBER_OF_CORES)) {
+        return false;
+    }
+    load = _core_load[core];
+    return true;
+}
+
+bool Util::get_system_load(float& avg_load, float& peak_load) const
+{
+    float load;
+    if (!get_core_load(0, load)) {
+        return false;
+    }
+    for (uint8_t c = 1; c < MAX_CORES; c++) {
+        float l;
+        if (get_core_load(c, l)) {
+            load = MAX(load, l);
+        }
+    }
+    avg_load = load;
+    peak_load = _peak_load;
+    return true;
+}
+
 void Util::thread_info(ExpandingString &str)
 {
     // a header to allow for machine parsers to determine format

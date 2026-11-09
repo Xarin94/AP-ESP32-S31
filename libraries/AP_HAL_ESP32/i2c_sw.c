@@ -26,6 +26,11 @@
    described in [wikipedia](https://en.wikipedia.org/wiki/I%C2%B2C#Example_of_bit-banging_the_I%C2%B2C_master_protocol).
 */
 
+#include "sdkconfig.h"
+
+// the bit-banged bus drives the ESP32/ESP32-S3 GPIO registers directly
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+
 #include "esp_err.h"
 #define DEBUG printf
 
@@ -725,3 +730,26 @@ int i2c_write_reg(_i2c_bus_t* bus, uint16_t addr, uint16_t reg,
 {
     return i2c_write_regs(bus, addr, reg, &data, 1, flags);
 }
+
+#else // other targets: no software I2C, the hardware I2C driver is used
+
+#include <stdio.h>
+#include <errno.h>
+#include "i2c_sw.h"
+
+void i2c_init(_i2c_bus_t* bus)
+{
+    printf("i2c_sw: software I2C is not supported on this target\n");
+}
+
+int i2c_read_bytes(_i2c_bus_t* bus, uint16_t addr, void *data, size_t len, uint8_t flags)
+{
+    return -ENODEV;
+}
+
+int i2c_write_bytes(_i2c_bus_t* bus, uint16_t addr, const void *data, size_t len, uint8_t flags)
+{
+    return -ENODEV;
+}
+
+#endif // CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3

@@ -77,8 +77,8 @@ void Scheduler::init()
 
     // keep main tasks that need speed on CPU 0
     // pin potentially slow stuff to CPU 1, as we have disabled the WDT on that core.
-    #define FASTCPU 0
-    #define SLOWCPU 1
+    #define FASTCPU HAL_ESP32_FASTCPU
+    #define SLOWCPU HAL_ESP32_SLOWCPU
 
     // pin main thread to Core 0, and we'll also pin other heavy-tasks to core 1, like wifi-related.
     if (xTaskCreatePinnedToCore(_main_thread, "APM_MAIN", Scheduler::MAIN_SS, this, Scheduler::MAIN_PRIO, &_main_task_handle,FASTCPU) != pdPASS) {
@@ -192,8 +192,15 @@ bool Scheduler::thread_create(AP_HAL::MemberProc proc, const char *name, uint32_
     #define EXTRA_THREAD_SPACE 1024
     uint32_t actual_stack_size = requested_stack_size+EXTRA_THREAD_SPACE;
 
+    BaseType_t core = HAL_ESP32_THREAD_CPU;
+    if (base == PRIORITY_CAN) {
+        core = HAL_ESP32_CAN_THREAD_CPU;
+    } else if (base == PRIORITY_IO) {
+        core = HAL_ESP32_IO_THREAD_CPU;
+    }
+
     tskTaskControlBlock* xhandle;
-    BaseType_t xReturned = xTaskCreate(thread_create_trampoline, name, actual_stack_size, tproc, thread_priority, &xhandle);
+    BaseType_t xReturned = xTaskCreatePinnedToCore(thread_create_trampoline, name, actual_stack_size, tproc, thread_priority, &xhandle, core);
     if (xReturned != pdPASS) {
         free(tproc);
         return false;

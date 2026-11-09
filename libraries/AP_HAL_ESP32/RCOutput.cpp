@@ -26,6 +26,16 @@
 
 #include "driver/rtc_io.h"
 
+#if !defined(SOC_MCPWM_TIMERS_PER_GROUP)
+// ESP-IDF >= 6 moved the MCPWM capabilities to the LL layer
+#include "hal/mcpwm_ll.h"
+#define SOC_MCPWM_GROUPS                    MCPWM_LL_GET(GROUP_NUM)
+#define SOC_MCPWM_TIMERS_PER_GROUP          MCPWM_LL_GET(TIMERS_PER_GROUP)
+#define SOC_MCPWM_OPERATORS_PER_GROUP       MCPWM_LL_GET(OPERATORS_PER_GROUP)
+#define SOC_MCPWM_COMPARATORS_PER_OPERATOR  MCPWM_LL_GET(COMPARATORS_PER_OPERATOR)
+#define SOC_MCPWM_GENERATORS_PER_OPERATOR   MCPWM_LL_GET(GENERATORS_PER_OPERATOR)
+#endif
+
 #include <stdio.h>
 
 #include "esp_log.h"
@@ -112,6 +122,11 @@ void RCOutput::init()
     printf("oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n");
     printf("RCOutput::init() - channels available: %d \n",(int)MAX_CHANNELS);
     printf("oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n");
+
+    if (MAX_CHANNELS == 0) {
+        // no PWM outputs: the pin, group and channel arrays are empty
+        return;
+    }
 
     _initialized = true; // assume we are initialized, any error will call abort()
 

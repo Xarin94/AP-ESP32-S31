@@ -16,6 +16,7 @@
 #include <AP_HAL_ESP32/UARTDriver.h>
 #include <AP_Math/AP_Math.h>
 
+#include "driver/gpio.h"
 #include "esp_log.h"
 
 extern const AP_HAL::HAL& hal;
@@ -24,6 +25,15 @@ namespace ESP32
 {
 
 UARTDesc uart_desc[] = {HAL_ESP32_UART_DEVICES};
+
+static inline bool is_usb_serial_jtag(uart_port_t p)
+{
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+    return p == USB_SERIAL_JTAG;
+#else
+    return false;
+#endif
+}
 
 void UARTDriver::vprintf(const char *fmt, va_list ap)
 {
@@ -36,6 +46,38 @@ void UARTDriver::vprintf(const char *fmt, va_list ap)
     }
 }
 
+// route the UART to its pins, the other way round with OPTION_SWAP
+void UARTDriver::apply_pins()
+{
+    const UARTDesc &d = uart_desc[uart_num];
+    const bool swap = option_is_set(OPTION_SWAP);
+    uart_set_pin(d.port,
+                 swap ? d.rx : d.tx,
+                 swap ? d.tx : d.rx,
+                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+}
+
+bool UARTDriver::set_options(uint16_t options)
+{
+    if (uart_num >= ARRAY_SIZE(uart_desc) || is_usb_serial_jtag(uart_desc[uart_num].port)) {
+        return AP_HAL::UARTDriver::set_options(options);
+    }
+    const bool swap_changed = ((options ^ _last_options) & OPTION_SWAP) != 0;
+    _last_options = options;
+    if (_initialized && swap_changed) {
+        // the GPIO matrix keeps a pin on its old signal until it is reset
+        const UARTDesc &d = uart_desc[uart_num];
+        if (d.rx != GPIO_NUM_NC) {
+            gpio_reset_pin(d.rx);
+        }
+        if (d.tx != GPIO_NUM_NC) {
+            gpio_reset_pin(d.tx);
+        }
+        apply_pins();
+    }
+    return (options & ~OPTION_SWAP) == 0;
+}
+
 void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
 {
     if (b == 0 && txS == 0 && rxS == 0 && _initialized) {
@@ -46,6 +88,26 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
 
     if (uart_num < ARRAY_SIZE(uart_desc)) {
         uart_port_t p = uart_desc[uart_num].port;
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+        if (is_usb_serial_jtag(p)) {
+            if (!_initialized) {
+                usb_serial_jtag_driver_config_t config = {
+                    .tx_buffer_size = TX_BUF_SIZE,
+                    .rx_buffer_size = RX_BUF_SIZE,
+                };
+                if (!usb_serial_jtag_is_driver_installed()) {
+                    usb_serial_jtag_driver_install(&config);
+                }
+                _readbuf.set_size(RX_BUF_SIZE);
+                _writebuf.set_size(TX_BUF_SIZE);
+                _uart_owner_thd = xTaskGetCurrentTaskHandle();
+                _initialized = true;
+            }
+            // no baudrate on USB
+            _baudrate = b;
+            return;
+        }
+#endif
         if (!_initialized) {
 
             uart_config_t config = {
@@ -56,10 +118,7 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
                 .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
             };
             uart_param_config(p, &config);
-            uart_set_pin(p,
-                         uart_desc[uart_num].tx,
-                         uart_desc[uart_num].rx,
-                         UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+            apply_pins();
             //uart_driver_install(p, 2*UART_FIFO_LEN, 0, 0, nullptr, 0);
             uart_driver_install(p, 2*UART_HW_FIFO_LEN(p), 0, 0, nullptr, 0);
             _readbuf.set_size(RX_BUF_SIZE);
@@ -79,7 +138,13 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
 void UARTDriver::_end()
 {
     if (_initialized) {
-        uart_driver_delete(uart_desc[uart_num].port);
+        if (is_usb_serial_jtag(uart_desc[uart_num].port)) {
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+            usb_serial_jtag_driver_uninstall();
+#endif
+        } else {
+            uart_driver_delete(uart_desc[uart_num].port);
+        }
         _readbuf.set_size(0);
         _writebuf.set_size(0);
     }
@@ -89,6 +154,9 @@ void UARTDriver::_end()
 void UARTDriver::_flush()
 {
     uart_port_t p = uart_desc[uart_num].port;
+    if (is_usb_serial_jtag(p)) {
+        return;
+    }
     uart_flush(p);
 }
 
@@ -156,6 +224,17 @@ void IRAM_ATTR UARTDriver::read_data()
 {
     uart_port_t p = uart_desc[uart_num].port;
     int count = 0;
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+    if (is_usb_serial_jtag(p)) {
+        do {
+            count = usb_serial_jtag_read_bytes(_buffer, sizeof(_buffer), 0);
+            if (count > 0) {
+                _readbuf.write(_buffer, count);
+            }
+        } while (count > 0);
+        return;
+    }
+#endif
     do {
         count = uart_read_bytes(p, _buffer, sizeof(_buffer), 0);
         if (count > 0) {
@@ -172,6 +251,11 @@ void IRAM_ATTR UARTDriver::write_data()
     do {
         count = _writebuf.peekbytes(_buffer, sizeof(_buffer));
         if (count > 0) {
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+            if (is_usb_serial_jtag(p)) {
+                count = usb_serial_jtag_write_bytes(_buffer, count, 0);
+            } else
+#endif
             count = uart_tx_chars(p, (const char*) _buffer, count);
             _writebuf.advance(count);
         }
@@ -229,7 +313,7 @@ void IRAM_ATTR UARTDriver::_receive_timestamp_update(void)
 uint64_t UARTDriver::receive_time_constraint_us(uint16_t nbytes)
 {
     uint64_t last_receive_us = _receive_timestamp[_receive_timestamp_idx];
-    if (_baudrate > 0) {
+    if (_baudrate > 0 && !is_usb_serial_jtag(uart_desc[uart_num].port)) {
         // assume 10 bits per byte. For USB we assume zero transport delay
         uint32_t transport_time_us = (1000000UL * 10UL / _baudrate) * (nbytes + available());
         last_receive_us -= transport_time_us;

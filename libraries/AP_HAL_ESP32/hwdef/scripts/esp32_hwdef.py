@@ -40,6 +40,9 @@ class ESP32HWDef(hwdef.HWDef):
         # list of SDSPI pin configurations
         self.esp32_sdspi = []
 
+        # list of ESP32_CAN (TWAI) interfaces
+        self.esp32_can = []
+
     def write_hwdef_header_content(self, f):
         for d in self.alllines:
             if d.startswith('define '):
@@ -54,6 +57,7 @@ class ESP32HWDef(hwdef.HWDef):
         self.write_RCOUT_config(f)
         self.write_ADC_config(f)
         self.write_SDSPI_config(f)
+        self.write_CAN_config(f)
 
     def process_line(self, line, depth):
         '''process one line of pin definition file'''
@@ -81,6 +85,9 @@ class ESP32HWDef(hwdef.HWDef):
 
         if a[0] == 'ESP32_SDSPI':
             self.process_line_esp32_sdspi(line, depth, a)
+
+        if a[0] == 'ESP32_CAN':
+            self.process_line_esp32_can(line, depth, a)
 
         super(ESP32HWDef, self).process_line(line, depth, a)
 
@@ -142,6 +149,12 @@ class ESP32HWDef(hwdef.HWDef):
     def process_line_esp32_sdspi(self, line, depth, a):
         (host, dma_ch, mosi, miso, sclk, cs) = a[1:]
         self.esp32_sdspi.append(self.SDSPI(host, dma_ch, mosi, miso, sclk, cs))
+
+    # ESP32_CAN support: one line per TWAI controller, in order
+    def process_line_esp32_can(self, line, depth, a):
+        if len(a) != 3:
+            self.error(f"Badly formed ESP32_CAN line {a} (want ESP32_CAN TXPIN RXPIN)")
+        self.esp32_can.append(a[1:])
 
     @dataclass
     class ADCPin():
@@ -234,6 +247,16 @@ class ESP32HWDef(hwdef.HWDef):
             outlist.append(f"{{.host={e.host}, .dma_ch={e.dma_ch}, .mosi={e.mosi}, .miso={e.miso}, .sclk={e.sclk}, .cs={e.cs}}}")  # NOQA:E501
 
         self.write_device_table(f, 'SDSPI configuration', 'HAL_ESP32_SDSPI', outlist)
+
+    def write_CAN_config(self, f):
+        '''write CAN (TWAI) interface defines'''
+        if len(self.esp32_can) == 0:
+            return
+        outlist = []
+        for (tx, rx) in self.esp32_can:
+            outlist.append(f"{{ .tx={tx}, .rx={rx} }}")
+        self.write_device_table(f, 'CAN interfaces', 'HAL_ESP32_CAN_DEVICES', outlist)
+        self.write_defaulting_define(f, 'HAL_NUM_CAN_IFACES', len(self.esp32_can))
 
 
 if __name__ == '__main__':

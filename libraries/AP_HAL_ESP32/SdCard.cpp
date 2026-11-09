@@ -20,7 +20,17 @@
 
 #include "SdCard.h"
 
+// ESP-IDF >= 6 ffconf.h evaluates MIN()/MAX() in #if expressions, while
+// AP_Math replaces those macros with templates
+#pragma push_macro("MIN")
+#pragma push_macro("MAX")
+#undef MIN
+#undef MAX
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #include "esp_vfs_fat.h"
+#pragma pop_macro("MAX")
+#pragma pop_macro("MIN")
 #include "esp_ota_ops.h"
 
 #include "driver/sdmmc_host.h"

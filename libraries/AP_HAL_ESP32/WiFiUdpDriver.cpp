@@ -56,8 +56,8 @@ void WiFiUdpDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
 
     // keep main tasks that need speed on CPU 0
     // pin potentially slow stuff to CPU 1, as we have disabled the WDT on that core.
-    #define FASTCPU 0
-    #define SLOWCPU 1
+    #define FASTCPU HAL_ESP32_FASTCPU
+    #define SLOWCPU HAL_ESP32_SLOWCPU
 
 	if (xTaskCreatePinnedToCore(_wifi_thread2, "APM_WIFI2", Scheduler::WIFI_SS2, this, Scheduler::WIFI_PRIO2, &_wifi_task_handle, SLOWCPU) != pdPASS) {
             hal.console->printf("FAILED to create task _wifi_thread2 on SLOWCPU\n");

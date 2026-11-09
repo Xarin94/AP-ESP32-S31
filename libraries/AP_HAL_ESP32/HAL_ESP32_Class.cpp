@@ -17,6 +17,10 @@
 #include <AP_HAL_Empty/AP_HAL_Empty_Private.h>
 
 #include "HAL_ESP32_Class.h"
+#ifdef HAL_ESP32_USB_NO_CHIP_RESET
+#include "soc/soc.h"
+#include "soc/usb_serial_jtag_reg.h"
+#endif
 #include "Scheduler.h"
 #include "I2CDevice.h"
 #include "SPIDevice.h"
@@ -90,6 +94,11 @@ static Empty::Flash flashDriver;
 static AP_HAL::SIMState xsimstate;
 #endif
 
+#if HAL_NUM_CAN_IFACES > 0
+// created by AP_CANManager
+static ESP32::CANIface* canDrivers[HAL_NUM_CAN_IFACES];
+#endif
+
 extern const AP_HAL::HAL& hal;
 
 HAL_ESP32::HAL_ESP32() :
@@ -123,12 +132,25 @@ HAL_ESP32::HAL_ESP32() :
 #if HAL_WITH_DSP
         &dspDriver,
 #endif
+#if HAL_NUM_CAN_IFACES > 0
+        (AP_HAL::CANIface**)canDrivers
+#else
         nullptr
+#endif
     )
 {}
 
 void HAL_ESP32::run(int argc, char * const argv[], Callbacks* callbacks) const
 {
+#ifdef HAL_ESP32_USB_NO_CHIP_RESET
+    // the host must not reset the chip through the lines of the USB serial port
+    SET_PERI_REG_MASK(USB_SERIAL_JTAG_CHIP_RST_REG, USB_SERIAL_JTAG_USB_UART_CHIP_RST_DIS);
+#endif
+
+#ifdef HAL_ESP32_SPI_DEVICES
+    ESP32::SPIDeviceManager::deassert_all_cs();
+#endif
+
 #if AP_SIM_ENABLED
     AP::sitl()->init();
 #endif  // AP_SIM_ENABLED

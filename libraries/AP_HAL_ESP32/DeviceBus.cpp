@@ -121,8 +121,8 @@ AP_HAL::Device::PeriodicHandle DeviceBus::register_periodic_callback(uint32_t pe
 #ifdef BUSDEBUG
         printf("%s:%d Thread Start\n", __PRETTY_FUNCTION__, __LINE__);
 #endif
-        xTaskCreate(DeviceBus::bus_thread, name, Scheduler::DEVICE_SS,
-                    this, thread_priority, &bus_thread_handle);
+        xTaskCreatePinnedToCore(DeviceBus::bus_thread, name, Scheduler::DEVICE_SS,
+                                this, thread_priority, &bus_thread_handle, HAL_ESP32_DEVICE_BUS_CPU);
     }
     DeviceBus::callback_info *callback = NEW_NOTHROW DeviceBus::callback_info;
     if (callback == nullptr) {

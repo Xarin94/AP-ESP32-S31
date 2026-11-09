@@ -21,6 +21,34 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+/*
+  core assignment of the HAL threads, overridable from hwdef.dat:
+  - FASTCPU: main loop, timer and UART threads
+  - SLOWCPU: Wi-Fi, IO, storage and RC threads (no task watchdog)
+  - DEVICE_BUS_CPU: SPI/I2C bus threads, which run the sensor drivers
+  - THREAD_CPU: threads created by libraries (DroneCAN, logging, ...)
+ */
+#ifndef HAL_ESP32_FASTCPU
+#define HAL_ESP32_FASTCPU 0
+#endif
+#ifndef HAL_ESP32_SLOWCPU
+#define HAL_ESP32_SLOWCPU 1
+#endif
+#ifndef HAL_ESP32_DEVICE_BUS_CPU
+#define HAL_ESP32_DEVICE_BUS_CPU tskNO_AFFINITY
+#endif
+#ifndef HAL_ESP32_THREAD_CPU
+#define HAL_ESP32_THREAD_CPU tskNO_AFFINITY
+#endif
+// core of the CAN (DroneCAN, CAN sensors) and IO-class (logger, compass
+// calibration, OSD...) library threads, by default with the other ones
+#ifndef HAL_ESP32_CAN_THREAD_CPU
+#define HAL_ESP32_CAN_THREAD_CPU HAL_ESP32_THREAD_CPU
+#endif
+#ifndef HAL_ESP32_IO_THREAD_CPU
+#define HAL_ESP32_IO_THREAD_CPU HAL_ESP32_THREAD_CPU
+#endif
+
 #define ESP32_SCHEDULER_MAX_TIMER_PROCS 10
 #define ESP32_SCHEDULER_MAX_IO_PROCS 10
 #define TWDT_TIMEOUT_MS 3000

@@ -88,7 +88,9 @@ BinarySemaphore::BinarySemaphore(bool initial_state)
 
 bool BinarySemaphore::wait(uint32_t timeout_us)
 {
-    TickType_t ticks = pdMS_TO_TICKS(timeout_us / 1000U);
+    // rounded up: a wait shorter than a tick must still block, or a caller
+    // looping on a short timeout spins
+    TickType_t ticks = pdMS_TO_TICKS((timeout_us + 999U) / 1000U);
     return xSemaphoreTake(_sem, ticks) == pdTRUE;
 }
 

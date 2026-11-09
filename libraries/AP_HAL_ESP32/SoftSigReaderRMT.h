@@ -19,7 +19,9 @@
 
 #include <AP_HAL/utility/RingBuffer.h>
 #include "AP_HAL_ESP32.h"
-#include "driver/rmt.h"
+#include "RmtSigReader.h"
+
+#if HAL_ESP32_HAVE_LEGACY_RMT
 
 namespace ESP32
 {
@@ -45,3 +47,4 @@ private:
 };
 }
 
+#endif // HAL_ESP32_HAVE_LEGACY_RMT

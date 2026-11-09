@@ -1,7 +1,7 @@
 #include <AP_HAL/HAL.h>
 #include "RmtSigReader.h"
 
-#ifdef HAL_ESP32_RCIN
+#if defined(HAL_ESP32_RCIN) && HAL_ESP32_HAVE_LEGACY_RMT
 
 using namespace ESP32;
 

@@ -17,7 +17,16 @@
 
 #include <AP_HAL/utility/RingBuffer.h>
 #include "AP_HAL_ESP32.h"
+
+// the reader uses the legacy RMT driver, removed in ESP-IDF 6
+#if __has_include("driver/rmt.h")
+#define HAL_ESP32_HAVE_LEGACY_RMT 1
 #include "driver/rmt.h"
+#else
+#define HAL_ESP32_HAVE_LEGACY_RMT 0
+#endif
+
+#if HAL_ESP32_HAVE_LEGACY_RMT
 
 class ESP32::RmtSigReader
 {
@@ -40,3 +49,5 @@ private:
     uint32_t ready_low;
     bool pulse_ready;
 };
+
+#endif // HAL_ESP32_HAVE_LEGACY_RMT

@@ -78,7 +78,12 @@ SPIDevice::SPIDevice(SPIBus &_bus, SPIDeviceDesc &_device_desc)
     cfg_low.clock_speed_hz = _device_desc.lspeed;
     cfg_low.spics_io_num = -1;
     cfg_low.queue_size = 5;
-    spi_bus_add_device(bus_desc[_bus.bus].host, &cfg_low, &low_speed_dev_handle);
+    // ESP-IDF takes at most 6 devices per host, and a device with two
+    // speeds is two of them: a device left without a handle would crash on
+    // its first transfer
+    if (spi_bus_add_device(bus_desc[_bus.bus].host, &cfg_low, &low_speed_dev_handle) != ESP_OK) {
+        AP_HAL::panic("SPI: no room for %s on its bus", _device_desc.name);
+    }
 
     if (_device_desc.hspeed != _device_desc.lspeed) {
         spi_device_interface_config_t cfg_high;
@@ -87,7 +92,9 @@ SPIDevice::SPIDevice(SPIBus &_bus, SPIDeviceDesc &_device_desc)
         cfg_high.clock_speed_hz = _device_desc.hspeed;
         cfg_high.spics_io_num = -1;
         cfg_high.queue_size = 5;
-        spi_bus_add_device(bus_desc[_bus.bus].host, &cfg_high, &high_speed_dev_handle);
+        if (spi_bus_add_device(bus_desc[_bus.bus].host, &cfg_high, &high_speed_dev_handle) != ESP_OK) {
+            AP_HAL::panic("SPI: no room for %s high speed on its bus", _device_desc.name);
+        }
     }
 
 
@@ -99,6 +106,13 @@ SPIDevice::SPIDevice(SPIBus &_bus, SPIDeviceDesc &_device_desc)
 
 SPIDevice::~SPIDevice()
 {
+    // give the bus slots back (a driver deletes the device of a failed probe)
+    if (high_speed_dev_handle != nullptr) {
+        spi_bus_remove_device(high_speed_dev_handle);
+    }
+    if (low_speed_dev_handle != nullptr) {
+        spi_bus_remove_device(low_speed_dev_handle);
+    }
     free(pname);
 }
 
@@ -161,7 +175,13 @@ bool SPIDevice::transfer_fullduplex(const uint8_t *send, uint8_t *recv, uint32_t
     t.tx_buffer = send;
     t.rxlength = len*8;
     t.rx_buffer = recv;
-    spi_device_transmit(current_handle(), &t);
+    if (len <= 64) {
+        // register-sized transfers: busy-wait, avoiding the interrupt and
+        // context switch round trip of a queued transaction
+        spi_device_polling_transmit(current_handle(), &t);
+    } else {
+        spi_device_transmit(current_handle(), &t);
+    }
     acquire_bus(false);
     return true;
 }
@@ -202,6 +222,16 @@ bool SPIDevice::adjust_periodic_callback(AP_HAL::Device::PeriodicHandle h, uint3
 }
 
 #ifdef HAL_ESP32_SPI_DEVICES
+void SPIDeviceManager::deassert_all_cs()
+{
+    for (auto &desc : device_desc) {
+        esp_rom_gpio_pad_select_gpio(desc.cs);
+        gpio_set_level(desc.cs, 1);
+        gpio_set_direction(desc.cs, GPIO_MODE_OUTPUT);
+        gpio_set_level(desc.cs, 1);
+    }
+}
+
 AP_HAL::SPIDevice *
 SPIDeviceManager::get_device_ptr(const char *name)
 {
@@ -241,15 +271,6 @@ SPIDeviceManager::get_device_ptr(const char *name)
         }
         busp->next = buses;
         busp->bus = desc.bus;
-        // deassert all CSes on the bus
-        for (i = 0; i<ARRAY_SIZE(device_desc); i++) {
-            SPIDeviceDesc &curr_desc = device_desc[i];
-            if (desc.bus == curr_desc.bus) {
-                esp_rom_gpio_pad_select_gpio(curr_desc.cs);
-                gpio_set_direction(curr_desc.cs, GPIO_MODE_OUTPUT);
-                gpio_set_level(curr_desc.cs, 1);
-            }
-        }
         buses = busp;
     }
 

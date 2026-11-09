@@ -101,6 +101,11 @@ public:
 
     AP_HAL::SPIDevice *get_device_ptr(const char *name) override;
 
+    // drive every chip select high: a device left selected while the bus
+    // pins come up takes the stray edges as traffic (the RM3100 then returns
+    // garbage), so this runs before any SPI bus is set up
+    static void deassert_all_cs();
+
 private:
     SPIBus *buses;
 };

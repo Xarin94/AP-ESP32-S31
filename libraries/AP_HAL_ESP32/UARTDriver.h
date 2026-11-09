@@ -22,6 +22,13 @@
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "soc/soc_caps.h"
+
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#include "driver/usb_serial_jtag.h"
+// port value for the USB Serial/JTAG peripheral in ESP32_SERIAL lines
+#define USB_SERIAL_JTAG ((uart_port_t)-1)
+#endif
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -77,7 +84,11 @@ public:
 
     uint32_t get_baud_rate() const override { return _baudrate; }
 
+    bool set_options(uint16_t options) override;
+
 private:
+    void apply_pins();
+
     bool _initialized;
     const size_t TX_BUF_SIZE = 1024;
     const size_t RX_BUF_SIZE = 1024;

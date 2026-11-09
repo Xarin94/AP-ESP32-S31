@@ -16,9 +16,9 @@
  *
  */
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_ESP32
-
 #include "SoftSigReaderRMT.h"
+
+#if CONFIG_HAL_BOARD == HAL_BOARD_ESP32 && HAL_ESP32_HAVE_LEGACY_RMT
 
 using namespace ESP32;
 
