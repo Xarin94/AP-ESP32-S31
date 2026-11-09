@@ -23,7 +23,13 @@
 #define HAL_CPU_CLASS HAL_CPU_CLASS_150
 #define HAL_WITH_DRONECAN 0
 #define HAL_WITH_UAVCAN 0
-#define HAL_MAX_CAN_PROTOCOL_DRIVERS 0
+// boards with a TWAI controller and transceiver set HAL_NUM_CAN_IFACES in hwdef.dat
+#ifndef HAL_NUM_CAN_IFACES
+#define HAL_NUM_CAN_IFACES 0
+#endif
+#ifndef HAL_MAX_CAN_PROTOCOL_DRIVERS
+#define HAL_MAX_CAN_PROTOCOL_DRIVERS HAL_NUM_CAN_IFACES
+#endif
 #define HAL_HAVE_SAFETY_SWITCH 0
 #define HAL_HAVE_BOARD_VOLTAGE 0
 #define HAL_HAVE_SERVO_VOLTAGE 0
@@ -52,7 +58,6 @@
 #define HAL_WITH_EKF_DOUBLE HAL_HAVE_HARDWARE_DOUBLE
 #endif
 
-#define HAL_NUM_CAN_IFACES 0
 #define HAL_MEM_CLASS HAL_MEM_CLASS_192
 
 // disable uncommon stuff that we'd otherwise get 
