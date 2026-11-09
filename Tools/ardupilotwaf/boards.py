@@ -758,8 +758,9 @@ def add_dynamic_boards_esp32():
             continue
         hwdef = os.path.join(dirname, d, 'hwdef.dat')
         if os.path.exists(hwdef):
-            mcu_esp32s3 = True if (d[0:7] == "esp32s3") else False
-            if mcu_esp32s3:
+            if d.startswith("esp32s31"):
+                newclass = type(d, (esp32s31,), {'name': d})
+            elif d.startswith("esp32s3"):
                 newclass = type(d, (esp32s3,), {'name': d})
             else:
                 newclass = type(d, (esp32,), {'name': d})
@@ -1125,6 +1126,16 @@ class esp32(Board):
     # so unlike Linux and SITL the toolchain comes from this attribute
     toolchain = 'xtensa-esp32-elf'
 
+    def __init__(self):
+        super().__init__()
+        # DroneCAN is built for boards that declare TWAI interfaces
+        self.with_can = False
+        hwdef = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../libraries/AP_HAL_ESP32/hwdef',
+                             self.get_name(), 'hwdef.dat')
+        if os.path.exists(hwdef):
+            with open(hwdef) as f:
+                self.with_can = any(line.split()[:1] == ['ESP32_CAN'] for line in f)
+
     def configure_env(self, cfg, env):
         env.BOARD_CLASS = "ESP32"
 
@@ -1135,6 +1146,9 @@ class esp32(Board):
 
         super(esp32, self).configure_env(cfg, env)
         cfg.load('esp32')
+        if self.with_can:
+            # AP_DroneCAN's frame handling expects the multi-interface API
+            env.DEFINES.update(CANARD_MULTI_IFACE=1)
         env.DEFINES.update(
             CONFIG_HAL_BOARD = 'HAL_BOARD_ESP32',
         )
@@ -1227,6 +1241,28 @@ class esp32s3(esp32):
         if hasattr(self, 'hwdef'):
             cfg.env.HWDEF = self.hwdef
         super(esp32s3, self).configure_env(cfg, env)
+
+class esp32s31(esp32):
+    abstract = True
+    toolchain = 'riscv32-esp-elf'
+
+    def configure_env(self, cfg, env):
+        if hasattr(self, 'hwdef'):
+            cfg.env.HWDEF = self.hwdef
+        super(esp32s31, self).configure_env(cfg, env)
+        # RISC-V: no Xtensa long calls. Same ISA and ABI as ESP-IDF builds
+        # for the S31 (hardware single-precision FPU, Zc code-size
+        # extensions), without the Xesploop/Xespv vendor extensions: a task
+        # that executes a PIE instruction is migrated to core 1 by ESP-IDF
+        isa_flags = ['-march=rv32imafcb_zicsr_zifencei_zaamo_zalrsc_zcb_zcmp_zcmt',
+                     '-mabi=ilp32f',
+                     '-mtune=esp-base',
+                     '-mno-cm-popret']
+        for flags in (env.CFLAGS, env.CXXFLAGS):
+            while '-mlongcalls' in flags:
+                flags.remove('-mlongcalls')
+            flags += isa_flags
+        env.LINKFLAGS += isa_flags[:2]
 
 class chibios(Board):
     abstract = True
