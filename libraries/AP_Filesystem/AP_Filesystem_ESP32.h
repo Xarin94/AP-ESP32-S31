@@ -10,7 +10,17 @@
 #include <dirent.h>
 #include "esp_err.h"
 #include "esp_log.h"
+// ESP-IDF >= 6 ffconf.h evaluates MIN()/MAX() in #if expressions, while
+// AP_Math replaces those macros with templates
+#pragma push_macro("MIN")
+#pragma push_macro("MAX")
+#undef MIN
+#undef MAX
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #include "esp_vfs_fat.h"
+#pragma pop_macro("MAX")
+#pragma pop_macro("MIN")
 #include "driver/sdmmc_host.h"
 #include "driver/sdspi_host.h"
 #include "sdmmc_cmd.h"
