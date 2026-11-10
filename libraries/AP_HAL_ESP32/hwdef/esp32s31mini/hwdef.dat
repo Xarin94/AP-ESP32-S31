@@ -1,7 +1,7 @@
 # MINI AHRS board V1.2 — ESP32-S31-WROOM-1-N16R16V
 #
 # Sensors on one SPI bus: SCH16T IMU, RM3100 magnetometer, 2x BMP581,
-# ELVH-L02D differential pressure. No PWM outputs.
+# ELVH-L02D differential pressure. PWM outputs SERVO1-8 on IO42-IO49.
 #
 # Module pins not available (datasheet S31): GPIO26-28/30-32 flash,
 # GPIO29/41 not bonded, GPIO33/34 USB Serial/JTAG, GPIO36/37/60/61 strapping.
@@ -101,8 +101,19 @@ define WIFI_PWD "ardupilot1"
 
 # no CAN: on the V1.2 board TXD and RXD of the MCP2542FD reach no readable GPIO
 
-# no PWM outputs and no RC input pin: RC comes from a serial protocol
-# (CRSF/ELRS/SBUS on SERIAL2/3)
+# PWM outputs SERVO1-8 on IO42-IO49 (MCPWM): pairs 1-2, 3-4, 5-6, 7-8 share
+# one timer, so one frequency
+ESP32_RCOUT GPIO_NUM_42
+ESP32_RCOUT GPIO_NUM_43
+ESP32_RCOUT GPIO_NUM_44
+ESP32_RCOUT GPIO_NUM_45
+ESP32_RCOUT GPIO_NUM_46
+ESP32_RCOUT GPIO_NUM_47
+ESP32_RCOUT GPIO_NUM_48
+ESP32_RCOUT GPIO_NUM_49
+
+# no RC input pin: RC comes from a serial protocol (CRSF/ELRS/SBUS on
+# SERIAL2/3)
 
 # status LEDs, active high: LED1 start-up, LED2 GPS fix and position. The V1.2
 # board has them on IO13 and IO12, not on IO14 and IO15 as in the schematic
