@@ -54,6 +54,8 @@ extern const AP_HAL::HAL &hal;
 #define BMP581_REG_OSR_EFF            0x38
 #define BMP581_REG_CMD                0x7E
 
+#define BMP581_CMD_SOFT_RESET         0xB6
+
 AP_Baro_BMP581::AP_Baro_BMP581(AP_Baro &baro, AP_HAL::Device &dev)
     : AP_Baro_Backend(baro)
     , _dev(&dev)
@@ -101,6 +103,18 @@ bool AP_Baro_BMP581::init()
         break;
     default:
         return false;
+    }
+
+    // soft reset: the power-on reset flag checked below is cleared on read, so
+    // a sensor that stayed powered through a reboot of the autopilot needs a
+    // reset to set it again
+    _dev->write_register(BMP581_REG_CMD, BMP581_CMD_SOFT_RESET);
+    hal.scheduler->delay(2);
+    if (_dev->bus_type() == AP_HAL::Device::BUS_TYPE_SPI) {
+        // after a reset a first read selects SPI again
+        if (!_dev->read_registers(BMP581_REG_CHIP_ID, &whoami, 1)) {
+            return false;
+        }
     }
 
     uint8_t status;
