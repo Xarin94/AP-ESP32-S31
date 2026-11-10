@@ -22,7 +22,7 @@ Run `./waf configure` again after every change to `hwdef.dat`. The images are in
 
 ## Prebuilt firmware
 
-[`firmware/plane`](firmware/plane) and [`firmware/rover`](firmware/rover) hold the ready-to-flash images of release 0.0.1 (tag `v0.0.1`, ArduPlane / ArduRover V4.8.0-dev, ESP-IDF v6.1), also attached to the [GitHub release](https://github.com/Xarin94/AP-ESP32-S31/releases/tag/v0.0.1): `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. ArduPlane was tested on the board, ArduRover is built from the same code but was not started on the board. They are not rebuilt automatically: a later commit may change the code without changing them.
+[`firmware/plane`](firmware/plane) and [`firmware/rover`](firmware/rover) hold the ready-to-flash images of release 0.0.2 (tag `v0.0.2`, ArduPlane / ArduRover V4.8.0-dev, ESP-IDF v6.1, flash in QIO): `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. ArduPlane was tested on the board, ArduRover is built from the same code but was not started on the board. They are not rebuilt automatically: a later commit may change the code without changing them. The images of release 0.0.1 (tag `v0.0.1`, [GitHub release](https://github.com/Xarin94/AP-ESP32-S31/releases/tag/v0.0.1)) read the flash in DIO: with a GPS fix and EKF3 using it they hold the main loop at about 177 Hz instead of 200.
 
 ## Flashing
 
@@ -31,11 +31,11 @@ Over USB (USB-C connector, USB Serial/JTAG of the ESP32-S31). On the board's USB
 ```sh
 cd build/esp32s31mini/esp-idf_build
 python -m esptool --chip esp32s31 -p <PORT> -b 115200 --no-stub write-flash \
-    --flash-mode dio --flash-freq 80m --flash-size 16MB \
+    --flash-mode keep --flash-freq keep --flash-size 16MB \
     0x2000 bootloader/bootloader.bin 0x10000 partition_table/partition-table.bin 0x20000 ardupilot.bin
 ```
 
-To update only the firmware, `0x20000 ardupilot.bin` is enough: the bootloader, the partition table and the parameters are kept. If the board ran another ArduPilot firmware before, reset the parameters at the first boot (`FORMAT_VERSION 0`, or "Reset to defaults" from the GCS).
+The images carry their flash mode, QIO (DIO in release 0.0.1): `--flash-mode keep` leaves it as built, `--flash-mode dio` would slow the board down (see [Use of the two cores](#use-of-the-two-cores)). The bootloader sets the mode: a board that has the 0.0.1 bootloader needs the new `bootloader.bin` written once. To update only the firmware, `0x20000 ardupilot.bin` is enough: the bootloader, the partition table and the parameters are kept. If the board ran another ArduPilot firmware before, reset the parameters at the first boot (`FORMAT_VERSION 0`, or "Reset to defaults" from the GCS).
 
 After flashing, the chip stays in download mode (esptool resets it with DTR high, which selects download mode again). The new firmware starts after unplugging and replugging the USB cable, or after a reset over USB with DTR low and RTS high:
 
@@ -177,7 +177,7 @@ Arming, pre-arm and calibration states are shown by the GCS.
 | HP CPU0 | main loop (vehicle, AHRS/EKF3), timer, UART |
 | HP CPU1 | SPI bus thread (SCH16T at 1 kHz, baros, compass; priority 24, above Wi-Fi), Wi-Fi/lwIP, IO, storage, RC, library threads (live FFT) |
 
-The main loop runs at 200 Hz (`SCHED_LOOP_RATE` in `defaults.parm`). Measured with ArduPlane and the live FFT on: core 0 at 69%, core 1 at 36%. The main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
+The main loop runs at 200 Hz (`SCHED_LOOP_RATE` in `defaults.parm`). Measured with ArduPlane, a GPS fix with EKF3 using it and the live FFT on (`INS_FFT_LIVE 1`): core 0 at 61%, core 1 at 35%, scheduler load 61%. The code runs from the flash through a 16 kB instruction cache, so the flash mode counts: in DIO, the same load took core 0 to 88% and held the loop at 177 Hz ("Main loop slow"), while without the GPS fix it stayed at 200 Hz; compiling for speed (`-O2`) instead of size made no difference. Without a GPS fix the main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
 
 Set from the hwdef: `HAL_ESP32_FASTCPU`, `HAL_ESP32_SLOWCPU`, `HAL_ESP32_DEVICE_BUS_CPU`, `HAL_ESP32_THREAD_CPU` (and `HAL_ESP32_CAN_THREAD_CPU`, `HAL_ESP32_IO_THREAD_CPU`). The load is sent in telemetry: `SYS_STATUS.load` is the busiest core, measured from the FreeRTOS idle time; `NAMED_VALUE_FLOAT` `CPU0` and `CPU1` give each core in %.
 
@@ -185,7 +185,7 @@ Set from the hwdef: `HAL_ESP32_FASTCPU`, `HAL_ESP32_SLOWCPU`, `HAL_ESP32_DEVICE_
 
 Build:
 - `Tools/ardupilotwaf/boards.py`, `esp32.py`: `esp32s31` board class (toolchain `riscv32-esp-elf`, `-march=rv32imafcb_zicsr_zifencei_zaamo_zalrsc_zcb_zcmp_zcmt -mabi=ilp32f`, without the PIE/Xesploop extensions, because ESP-IDF moves the tasks that use them to core 1); DroneCAN enabled when the hwdef has `ESP32_CAN` lines.
-- `libraries/AP_HAL_ESP32/targets/esp32s31/`: ESP-IDF project, `sdkconfig.defaults` (320 MHz, newlib, PSRAM disabled), partitions (6 MB app). The CMake file links every component, because in ESP-IDF 6 the HAL is split into `esp_hal_*` components with their own ROM linker scripts.
+- `libraries/AP_HAL_ESP32/targets/esp32s31/`: ESP-IDF project, `sdkconfig.defaults` (320 MHz, flash in QIO, newlib, PSRAM disabled), partitions (6 MB app). The CMake file links every component, because in ESP-IDF 6 the HAL is split into `esp_hal_*` components with their own ROM linker scripts.
 
 ESP32 HAL on ESP-IDF 6.1:
 - `CANIface` (new): CAN on TWAI with the `esp_twai` node driver; RX through a FreeRTOS queue from the ISR, TX slots, loopback for the DroneCAN time sync, bus-off recovery at 1 Hz.
@@ -209,15 +209,18 @@ Drivers and libraries:
 
 ## Status
 
-Release 0.0.1, checked on the V1.2 board with ArduPlane:
-- boot, ESP-IDF console and MAVLink on SERIAL0 (USB), Wi-Fi access point;
-- SCH16T, both BMP581 and RM3100 running; the BMP581 also after a reset over USB;
-- u-blox detected at 460800 on S1;
-- main loop at 200 Hz, core 0 at 69% and core 1 at 36% with the live FFT on (four spectra per second);
-- 8 PWM channels set up (`RCOutput::init()` reports 8).
+Release 0.0.2, checked on the V1.2 board with ArduPlane, at rest with a GPS 3D fix:
+- MAVLink on SERIAL0 (USB);
+- SCH16T, both BMP581 (calibrated at boot) and RM3100 running;
+- u-blox detected at 460800 on S1, 3D fix;
+- EKF3: tilt and yaw alignment (MAG0), origin set, using GPS, AHRS on EKF3;
+- main loop at 200 Hz with EKF3 using GPS and the live FFT on: core 0 at 61%, core 1 at 35%, scheduler load 61%;
+- live FFT: four spectra per second, gyro floor −77 dB and accelerometer −58 dB below the 68 Hz IMU filter.
+
+Release 0.0.1 also checked the Wi-Fi access point, the BMP581 after a reset over USB and the 8 PWM channels set up (`RCOutput::init()` reports 8).
 
 Still to check:
-1. EKF3 with a GPS fix (tested indoors, no fix): alignment, use of GPS and compass;
+1. EKF3 with GPS and compass in motion and in flight;
 2. IMU variant and rotation, compass rotation, calibrations;
 3. PWM signals on IO42-IO49, telemetry on S2;
 4. ELVH on a board where it is connected: `DiffPress` close to 0 with the pitot covered and a plausible `Temp`;
