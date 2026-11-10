@@ -16,9 +16,12 @@ CONFIG_APP_EXCLUDE_PROJECT_NAME_VAR=y
 CONFIG_APP_RETRIEVE_LEN_ELF_SHA=16
 
 #
-# Serial flasher config: 16 MB flash on the module
+# Serial flasher config: 16 MB flash on the module, read in QIO: the code
+# runs from flash through a 16 kB instruction cache, and a miss costs half
+# the time of DIO
 #
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 
 #
 # Partition Table
