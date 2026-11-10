@@ -4,7 +4,7 @@ Standard ArduPilot, with EKF3, ported to the ESP32-S31 (ESP-IDF 6.1) for the MIN
 
 - Board: `esp32s31mini`, hwdef in this directory.
 - Base: ArduPilot master `dc78bc5` (October 2026).
-- Vehicles: ArduPlane, ArduRover, ArduCopter (the board has no PWM outputs and no CAN, see below).
+- Vehicles: ArduPlane, ArduRover, ArduCopter (8 PWM outputs, no CAN, see below).
 - Navigation: ArduPilot AHRS/EKF3, unmodified (`AHRS_EKF_TYPE 3`, the default).
 
 ## Build
@@ -22,7 +22,7 @@ Run `./waf configure` again after every change to `hwdef.dat`. The images are in
 
 ## Prebuilt firmware
 
-[`firmware/plane`](firmware/plane) and [`firmware/rover`](firmware/rover) hold ready-to-flash images, built from commit `bc48764` (ArduPlane / ArduRover V4.8.0-dev) with ESP-IDF v6.1: `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. They are not a release and are not rebuilt automatically: a later commit may change the code without changing them.
+[`firmware/plane`](firmware/plane) and [`firmware/rover`](firmware/rover) hold the ready-to-flash images of release 0.0.1 (tag `v0.0.1`, ArduPlane / ArduRover V4.8.0-dev, ESP-IDF v6.1), also attached to the [GitHub release](https://github.com/Xarin94/AP-ESP32-S31/releases/tag/v0.0.1): `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. ArduPlane was tested on the board, ArduRover is built from the same code but was not started on the board. They are not rebuilt automatically: a later commit may change the code without changing them.
 
 ## Flashing
 
@@ -37,7 +37,11 @@ python -m esptool --chip esp32s31 -p <PORT> -b 115200 --no-stub write-flash \
 
 To update only the firmware, `0x20000 ardupilot.bin` is enough: the bootloader, the partition table and the parameters are kept. If the board ran another ArduPilot firmware before, reset the parameters at the first boot (`FORMAT_VERSION 0`, or "Reset to defaults" from the GCS).
 
-After flashing, the chip stays in download mode: the new firmware starts only after unplugging and replugging the USB cable.
+After flashing, the chip stays in download mode (esptool resets it with DTR high, which selects download mode again). The new firmware starts after unplugging and replugging the USB cable, or after a reset over USB with DTR low and RTS high:
+
+```sh
+python -c "import serial, time; s = serial.Serial('<PORT>'); s.rts = False; s.dtr = False; s.rts = True; time.sleep(0.1); s.rts = False"
+```
 
 If Windows reports "USB device not recognized": with the USB unplugged, connect pad 27 of the module (IO61) to GND, plug the USB in, remove the wire and, with the USB still connected, flash adding `--before no-reset`.
 
@@ -52,7 +56,8 @@ If Windows reports "USB device not recognized": with the USB unplugged, connect 
 | ELVH CS | 18 | airspeed `SPI:elvh`, `ARSPD_TYPE 21` |
 | UART1 RX / TX | 8 / 9 (connector S1) | SERIAL3, GPS |
 | UART2 RX / TX | 10 / 11 (connector S2) | SERIAL2, telemetry or serial RC (CRSF/ELRS: `SERIAL2_PROTOCOL 23`) |
-| USB D- / D+ | 33 / 34 | SERIAL0 (USB Serial/JTAG, MAVLink) |
+| USB D- / D+ | 33 / 34 | SERIAL0 (USB Serial/JTAG, MAVLink) and ESP-IDF console |
+| SERVO1-8 | 42-49 | `ESP32_RCOUT`, MCPWM; outputs 1-2, 3-4, 5-6, 7-8 share a timer (one frequency) |
 | LED1 / LED2 | 13 / 12 | status LEDs, see below |
 | Wi-Fi | — | SERIAL1, access point `ardupilot-s31` (password `ardupilot1`), UDP 192.168.4.1:14550 |
 
@@ -61,7 +66,7 @@ Notes on the V1.2 board, measured on the hardware:
 - The LEDs are on IO13 and IO12, not on IO14 and IO15 as in the schematic. LED3 (IO16) is not used.
 - The `CSmag` line (IO18) reads 0 V at the module and kept the RM3100 always selected: the RM3100 CS is bridged to IO38. IO18 stays as the ELVH CS, which is not connected on the V1.2 test board.
 - CAN (MCP2542FD): TXD and RXD reach no readable GPIO, so CAN is not configured (no `ESP32_CAN` lines, no DroneCAN). The HAL already has the CAN (TWAI) driver: on a board with CAN wired, `ESP32_CAN <TX> <RX>` in the hwdef is enough.
-- No PWM outputs and no dedicated RC input: RC comes from a serial protocol.
+- No dedicated RC input: RC comes from a serial protocol.
 - No SD card: logging, scripting and the filesystem are disabled.
 
 The SCH16T and RM3100 rotations should be checked by rotating the board by hand (see below).
@@ -102,7 +107,7 @@ The code repeats the filter three times (3 bits per axis): `000` 68 Hz, `001` 30
 
 ### EKF3 noise (SCH16T-K10, RM3100)
 
-EKF3 takes its process noises as the standard deviation per prediction step divided by the step: variance per step = (dt · NSE)². A white noise of density N gives a variance of N² · dt, so NSE = N / √dt. An offset drifting as a random walk of σ over a time T gives NSE = σ / (√T · √dt). The values below are computed with dt = 12 ms (`EKF_TARGET_DT`); Plane and Rover, with a 50 Hz loop, predict every 20 ms and with the same parameters have a 1.67 times larger variance per second, that is more conservative.
+EKF3 takes its process noises as the standard deviation per prediction step divided by the step: variance per step = (dt · NSE)². A white noise of density N gives a variance of N² · dt, so NSE = N / √dt. An offset drifting as a random walk of σ over a time T gives NSE = σ / (√T · √dt). The values below are computed with dt = 12 ms (`EKF_TARGET_DT`); with the 200 Hz loop of the board EKF3 predicts every 10 ms (two IMU frames), and with the same parameters the variance per second is 0.83 times the computed one.
 
 | Parameter | Sensor data | Sensor only | EKF3 default | In `defaults.parm` |
 |---|---|---|---|---|
@@ -140,11 +145,11 @@ New driver `AP_Airspeed_ELVH`: All Sensors ELVH differential pressure sensors wi
 
 ### GPS
 
-`defaults.parm` sets a u-blox on SERIAL3 at 460800 (`SERIAL3_BAUD 460`) with `GPS_AUTO_CONFIG 0`: with auto-configuration the driver accepts the u-blox only at 230400, so the module must already be configured to send UBX (NAV-PVT and DOP) at 460800 and saved to its flash. The GPS is powered by the board: after a USB replug it does a cold start.
+`defaults.parm` sets a u-blox on SERIAL3 at 460800 (`SERIAL3_BAUD 460`) with `GPS_AUTO_CONFIG 0`: with auto-configuration the driver accepts the u-blox only at 230400, so the module must already be configured to send UBX (NAV-PVT and DOP) at 460800 and saved to its flash. The GPS is powered by the board: after a USB replug it does a cold start. On ArduPlane EKF3 starts only with a 3D fix: until then the AHRS runs on DCM and the PreArm check reports "AHRS: not using configured AHRS type".
 
 ### Serial ports and telemetry
 
-- SERIAL0: USB Serial/JTAG. Open the port with DTR and RTS low: closing it after opening it with DTR/RTS high (the pyserial and pymavlink default) silences the board USB until a replug. `HAL_ESP32_USB_NO_CHIP_RESET` stops the USB lines from resetting the chip.
+- SERIAL0: USB Serial/JTAG, MAVLink and the ESP-IDF console (start-up log, HAL messages, panics) on the same port; a GCS skips the text. With DTR low and RTS high the USB Serial/JTAG resets the chip, and on the S31 (chip revision v0.0) `HAL_ESP32_USB_NO_CHIP_RESET` does not stop it, although the disable bit reads back set. Linux raises DTR and RTS when the port is opened and pyserial (pymavlink, MAVProxy) then lowers DTR first, which resets the board: it reboots in a few seconds. To connect without a reset, open the port and lower RTS before DTR (pyserial: `s = serial.Serial(port); s.rts = False; s.dtr = False`).
 - SERIAL1: Wi-Fi UDP.
 - SERIAL2, SERIAL3: UARTs on S2 and S1. The ESP32 HAL supports `SERIALn_OPTIONS` bit 3 (RX/TX swap).
 - Stream rates are per MAVLink channel (`MAVn_*`): SERIAL0 is MAV1, Wi-Fi MAV2, SERIAL2 MAV3.
@@ -169,8 +174,10 @@ Arming, pre-arm and calibration states are shown by the GCS.
 
 | Core | Threads |
 |---|---|
-| HP CPU0 | main loop (vehicle, AHRS/EKF3), timer, UART, SPI bus thread (SCH16T at 1 kHz, baros, compass) |
-| HP CPU1 | Wi-Fi/lwIP, IO, storage, library threads |
+| HP CPU0 | main loop (vehicle, AHRS/EKF3), timer, UART |
+| HP CPU1 | SPI bus thread (SCH16T at 1 kHz, baros, compass; priority 24, above Wi-Fi), Wi-Fi/lwIP, IO, storage, RC, library threads (live FFT) |
+
+The main loop runs at 200 Hz (`SCHED_LOOP_RATE` in `defaults.parm`). Measured with ArduPlane and the live FFT on: core 0 at 69%, core 1 at 36%. The main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
 
 Set from the hwdef: `HAL_ESP32_FASTCPU`, `HAL_ESP32_SLOWCPU`, `HAL_ESP32_DEVICE_BUS_CPU`, `HAL_ESP32_THREAD_CPU` (and `HAL_ESP32_CAN_THREAD_CPU`, `HAL_ESP32_IO_THREAD_CPU`). The load is sent in telemetry: `SYS_STATUS.load` is the busiest core, measured from the FreeRTOS idle time; `NAMED_VALUE_FLOAT` `CPU0` and `CPU1` give each core in %.
 
@@ -182,7 +189,8 @@ Build:
 
 ESP32 HAL on ESP-IDF 6.1:
 - `CANIface` (new): CAN on TWAI with the `esp_twai` node driver; RX through a FreeRTOS queue from the ISR, TX slots, loopback for the DroneCAN time sync, bus-off recovery at 1 Hz.
-- `UARTDriver`: `USB_SERIAL_JTAG` port; RX/TX swap with `SERIALn_OPTIONS`.
+- `UARTDriver`: `USB_SERIAL_JTAG` port; RX/TX swap with `SERIALn_OPTIONS`; the console moves to the USB Serial/JTAG driver when SERIAL0 opens.
+- Console on the USB Serial/JTAG (`sdkconfig.defaults`): UART0 is not routed on the board.
 - `Scheduler`, `DeviceBus`, `WiFi*`: cores set from the hwdef, bus and library threads with a fixed affinity.
 - `SPIDevice`: short transfers (≤ 64 bytes) polled; all CS driven high before any bus setup; stop at boot when an SPI host has no room for a device.
 - `Util`: load of each core from the FreeRTOS idle time.
@@ -194,14 +202,23 @@ Drivers and libraries:
 - `AP_InertialSensor_SCH16T` (new): Murata SCH16T-K01/K10 directly on SPI.
 - `AP_InertialSensor_Spectrum` (new): live vibration spectrum of the IMU over MAVLink (`INS_FFT_LIVE`, `AP_INERTIALSENSOR_SPECTRUM_ENABLED`), with the `FFTLive` autotest.
 - `AP_Airspeed_ELVH` (new, `ARSPD_TYPE 21`, `ARSPD_ELVH_RNG`), with the simulated sensor in SITL and the case in `AirspeedDrivers`.
+- `AP_Baro_BMP581`: soft reset before the power-on check, so the baro starts after a reboot without a power cycle.
 - `AP_Notify`: `AP_BoardLED_InitGPS`, the two status LEDs.
 - `GCS_MAVLink`: `SYS_STATUS.load` from the core load when the HAL measures it, `NAMED_VALUE_FLOAT` `CPU0`/`CPU1`.
-- ArduPlane: `PLANE_GCS_SEND_TIME_US`, the per-loop time of `update_send` set by the board (3 ms here).
+- ArduPlane: `PLANE_GCS_SEND_TIME_US`, the per-loop time of `update_send` set by the board (750 µs here for the 200 Hz loop; at 50 Hz the board needs 3 ms).
 
 ## Status
 
-The HAL, the drivers and the pinout are the same that already ran on the V1.2 board (USB, Wi-Fi, SCH16T, baros, RM3100, GPS, LEDs). This EKF3 build has not been started on the hardware yet. To check at the first boot:
-1. boot, USB console (SERIAL0) and Wi-Fi;
+Release 0.0.1, checked on the V1.2 board with ArduPlane:
+- boot, ESP-IDF console and MAVLink on SERIAL0 (USB), Wi-Fi access point;
+- SCH16T, both BMP581 and RM3100 running; the BMP581 also after a reset over USB;
+- u-blox detected at 460800 on S1;
+- main loop at 200 Hz, core 0 at 69% and core 1 at 36% with the live FFT on (four spectra per second);
+- 8 PWM channels set up (`RCOutput::init()` reports 8).
+
+Still to check:
+1. EKF3 with a GPS fix (tested indoors, no fix): alignment, use of GPS and compass;
 2. IMU variant and rotation, compass rotation, calibrations;
-3. EKF3: alignment, use of GPS and compass, load of core 0 (`CPU0`) with EKF3 in the main loop;
-4. ELVH on a board where it is connected: `DiffPress` close to 0 with the pitot covered and a plausible `Temp`.
+3. PWM signals on IO42-IO49, telemetry on S2;
+4. ELVH on a board where it is connected: `DiffPress` close to 0 with the pitot covered and a plausible `Temp`;
+5. ArduRover on the board.

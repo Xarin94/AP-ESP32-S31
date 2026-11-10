@@ -96,7 +96,9 @@ ESP32_SERIAL UART_NUM_2       GPIO_NUM_10  GPIO_NUM_11
 # leave. At 50 Hz it needs 3 ms (with 750 us the streams ran at 0.5 Hz)
 define PLANE_GCS_SEND_TIME_US 750
 
-# the USB lines must not reset the chip: telemetry held for an hour with this
+# asks the USB Serial/JTAG not to reset the chip from DTR/RTS. On the S31
+# (chip revision v0.0) the reset still happens with DTR low and RTS high,
+# although the disable bit reads back set: open the port lowering RTS first
 define HAL_ESP32_USB_NO_CHIP_RESET 1
 
 # MAVLink over Wi-Fi UDP (SERIAL1): access point, 192.168.4.1:14550
