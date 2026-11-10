@@ -46,11 +46,11 @@ CONFIG_TWAI_ISR_IN_IRAM=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_320=y
 
 #
-# ESP-IDF console on UART0 (not routed on the board). The USB Serial/JTAG
-# port belongs to ArduPilot (SERIAL0, MAVLink).
+# ESP-IDF console on the USB Serial/JTAG port (UART0 is not routed on the
+# board): the start-up and HAL messages share SERIAL0 with MAVLink, through
+# the same driver once SERIAL0 is opened.
 #
-CONFIG_ESP_CONSOLE_UART_DEFAULT=y
-CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
 #
 # Watchdogs: ArduPilot runs its own task watchdog on the main core

@@ -17,6 +17,9 @@
 #include <AP_Math/AP_Math.h>
 
 #include "driver/gpio.h"
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#include "driver/usb_serial_jtag_vfs.h"
+#endif
 #include "esp_log.h"
 
 extern const AP_HAL::HAL& hal;
@@ -97,6 +100,11 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
                 };
                 if (!usb_serial_jtag_is_driver_installed()) {
                     usb_serial_jtag_driver_install(&config);
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+                    // the console writes through the driver too, not
+                    // straight to the FIFO the driver is filling
+                    usb_serial_jtag_vfs_use_driver();
+#endif
                 }
                 _readbuf.set_size(RX_BUF_SIZE);
                 _writebuf.set_size(TX_BUF_SIZE);
