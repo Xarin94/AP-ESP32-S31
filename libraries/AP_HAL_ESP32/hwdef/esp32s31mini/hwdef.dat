@@ -9,12 +9,15 @@
 define HAL_ESP32_BOARD_NAME "esp32s31mini"
 
 # Dual core layout (HP CPU0 / HP CPU1):
-#  core 0: main loop (vehicle code, AHRS/EKF3), timer and UART threads, SPI
-#          bus thread (SCH16T at 1 kHz, baros, compass)
-#  core 1: Wi-Fi/lwIP, IO, storage, RC and library threads
+#  core 0: main loop (vehicle code, AHRS/EKF3), timer and UART threads
+#  core 1: SPI bus thread (SCH16T at 1 kHz, baros, compass), Wi-Fi/lwIP, IO,
+#          storage, RC and library threads
+# The SPI bus thread takes about a third of a core: on core 0 the main loop
+# reached 190 Hz, on core 1 about 300 Hz. On core 1 its priority (24) is above
+# Wi-Fi (23)
 define HAL_ESP32_FASTCPU 0
 define HAL_ESP32_SLOWCPU 1
-define HAL_ESP32_DEVICE_BUS_CPU 0
+define HAL_ESP32_DEVICE_BUS_CPU 1
 define HAL_ESP32_THREAD_CPU 1
 
 # SPI Buses
@@ -88,8 +91,10 @@ ESP32_SERIAL USB_SERIAL_JTAG  GPIO_NUM_NC  GPIO_NUM_NC
 ESP32_SERIAL UART_NUM_1       GPIO_NUM_8   GPIO_NUM_9
 ESP32_SERIAL UART_NUM_2       GPIO_NUM_10  GPIO_NUM_11
 
-# 3 ms per loop for the GCS: with the default the streams ran at 0.5 Hz
-define PLANE_GCS_SEND_TIME_US 3000
+# time per loop for the GCS. The board runs a 200 Hz loop (SCHED_LOOP_RATE in
+# defaults.parm), 5 ms per loop: the budget must fit in what the fast tasks
+# leave. At 50 Hz it needs 3 ms (with 750 us the streams ran at 0.5 Hz)
+define PLANE_GCS_SEND_TIME_US 750
 
 # the USB lines must not reset the chip: telemetry held for an hour with this
 define HAL_ESP32_USB_NO_CHIP_RESET 1

@@ -1,4 +1,7 @@
 # MINI AHRS board (ESP32-S31)
+# 200 Hz main loop (the loop reaches about 300 Hz): PLANE_GCS_SEND_TIME_US in
+# hwdef.dat is sized for it
+SCHED_LOOP_RATE 200
 # u-blox on connector S1 at 460800: with GPS_AUTO_CONFIG 1 the driver only
 # accepts it at 230400, so the module must already send UBX on its own
 SERIAL3_PROTOCOL 5
