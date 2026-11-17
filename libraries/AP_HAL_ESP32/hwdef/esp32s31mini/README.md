@@ -56,7 +56,7 @@ If Windows reports "USB device not recognized": with the USB unplugged, connect 
 | BMP581 #1 / #2 CS | 23 / 24 | `BARO BMP581` x2 |
 | RM3100 CS (`CSmag`) | 2 | `COMPASS RM3100`, `ROTATION_ROLL_180` (module upside down under the board) |
 | ELVH CS (`TOT`) | 38 | airspeed `SPI:elvh`, `ARSPD_TYPE 21` |
-| microSD CS (`cssd`) | 39 | `ESP32_SDSPI SPI3_HOST`, logs in `/SDCARD/APM/LOGS` |
+| SD memory CS (`cssd`) | 39 | `ESP32_SDSPI SPI3_HOST`, logs in `/SDCARD/APM/LOGS` |
 | GPS serial RX / TX (`rxgps` / `txgps`) | 3 / 4 | SERIAL3, GPS |
 | UART2 RX / TX | 10 / 11 (connector S2) | SERIAL2, telemetry or serial RC (CRSF/ELRS: `SERIAL2_PROTOCOL 23`) |
 | UART1 RX / TX | 8 / 9 (connector S1) | **SERIAL4** (SERIAL3 on the V1.2) |
@@ -155,7 +155,9 @@ New driver `AP_Airspeed_ELVH`: All Sensors ELVH differential pressure sensors wi
 
 ### SD card and logs
 
-The microSD card is in SPI mode on SPI bus 2, with the sensors. The IO thread mounts it at boot and, while disarmed, retries every 3 s; the logs go to `/SDCARD/APM/LOGS` (`LOG_BACKEND_TYPE 1`, the default) and can be downloaded over MAVLink. The log writer runs in a low priority thread and writes from a RAM buffer, but the SD driver holds the shared bus for a whole command, including the busy wait of the card, and meanwhile the baros, the compass and the airspeed sensor wait. While logging, check the sample intervals of `BARO` and `MAG`; the LP core reports the gaps of the bus thread (channel `SPI1`, see [LP core](#lp-core-supervisor-watchdog-and-diagnostics)). If the card does not mount or the log has write errors, lower `HAL_ESP32_SDSPI_MAX_FREQ_KHZ`.
+The SD memory is soldered on the board and works in SPI mode on SPI bus 2, with the sensors; on the bench board it is an SD NAND that identifies itself as `APPSD`, SDSC, 480 MB, and runs at 20 MHz. ArduPilot does not format it: it needs a FAT filesystem. The IO thread mounts it at boot and, while disarmed, retries every 3 s; the logs go to `/SDCARD/APM/LOGS` (`LOG_BACKEND_TYPE 1`, the default) and are written from arming (`LOG_DISARMED 0`). Over MAVFTP the paths are the same, starting from `/SDCARD`. The log writer runs in a low priority thread and writes from a RAM buffer, but the SD driver holds the shared bus for a whole command, including the busy wait of the card, and meanwhile the baros, the compass and the airspeed sensor wait. While logging, check the sample intervals of `BARO` and `MAG`; the LP core reports the gaps of the bus thread (channel `SPI1`, see [LP core](#lp-core-supervisor-watchdog-and-diagnostics)). If the card does not mount or the log has write errors, lower `HAL_ESP32_SDSPI_MAX_FREQ_KHZ`.
+
+The SD erase command was accepted by the memory without erasing every sector: a full erase of the bench board was done by writing 0xFF to every sector and reading them back, then a new FAT. In those tests, after a reset of the chip without a power cycle the memory did not answer until the board was unplugged and plugged in again: whether ArduPilot mounts it after a software reboot is still to check.
 
 ### CAN
 
@@ -194,7 +196,7 @@ Arming, pre-arm and calibration states are shown by the GCS.
 
 The main loop runs at 200 Hz (`SCHED_LOOP_RATE` in `defaults.parm`). Measured on the V1.2 (one SPI bus for all the sensors, no log, no CAN) with ArduPlane, a GPS fix with EKF3 using it and the live FFT on (`INS_FFT_LIVE 1`): core 0 at 61%, core 1 at 35%, scheduler load 61%. The code runs from the flash through a 16 kB instruction cache, so the flash mode counts: in DIO, the same load took core 0 to 88% and held the loop at 177 Hz ("Main loop slow"), while without the GPS fix it stayed at 200 Hz; compiling for speed (`-O2`) instead of size made no difference. Without a GPS fix the main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
 
-The V1.5 adds the second SPI bus thread, the log writer and DroneCAN on core 1, and the log messages on the main loop: its load has not been measured yet.
+The V1.5 adds the second SPI bus thread, the log writer and DroneCAN on core 1, and the log messages on the main loop. On the bench, with ArduPlane at rest, disarmed, without a GPS fix and without a log running, the main loop holds 200 Hz and `SYS_STATUS.load` reads 46–47%; with GPS, EKF3 and the log it has not been measured yet.
 
 Set from the hwdef: `HAL_ESP32_FASTCPU`, `HAL_ESP32_SLOWCPU`, `HAL_ESP32_DEVICE_BUS_CPU`, `HAL_ESP32_THREAD_CPU` (and `HAL_ESP32_CAN_THREAD_CPU`, `HAL_ESP32_IO_THREAD_CPU`). The load is sent in telemetry: `SYS_STATUS.load` is the busiest core, measured from the FreeRTOS idle time; `NAMED_VALUE_FLOAT` `CPU0` and `CPU1` give each core in %.
 
@@ -275,15 +277,21 @@ Release 0.0.2, checked on the V1.2 board with ArduPlane, at rest with a GPS 3D f
 
 Release 0.0.1 also checked the Wi-Fi access point, the BMP581 after a reset over USB and the 8 PWM channels set up (`RCOutput::init()` reports 8).
 
-The V1.5 pinout and the LP core supervisor come from the V1.5 bench board; with this firmware (EKF3) they have not been run on the board yet.
+V1.5 board, checked on 2026-11-17 with ArduPlane, at rest and disarmed, without a GPS connected:
+- boot, MAVLink on SERIAL0 (USB), Wi-Fi access point started;
+- SCH16T on its own bus, both BMP581 calibrated at boot, ELVH airspeed calibrated;
+- main loop at 200 Hz, `SYS_STATUS.load` 46–47%;
+- SD memory erased and formatted, mounted after a power-on: `/SDCARD/APM/LOGS` created, no log yet (logs start at arming);
+- LP core running, watchdog armed at 2000 ms, all 11 channels reporting (`MAIN`, `TIMR`, `UART`, `RCIN`, `RCOU`, `IO`, `STOR`, `IDL0`, `IDL1`, `SPI0`, `SPI1`), LP tick at most 29 µs out of 1000, no late ticks, no stalls 16 s after the start (longest gaps: 11 ms `SPI1`, 8 ms `MAIN`). The first boot after flashing reported `LP supervisor skipped: last start incomplete`: the start guard found in NVS the flag of an earlier start that did not reach 10 s, and the next boot started the LP core;
+- RM3100 not detected: `No Compass backends available` and `PreArm: Compass 1 not healthy`.
 
 Still to check:
 1. EKF3 with GPS and compass in motion and in flight;
 2. IMU variant and rotation, compass rotation, calibrations;
-3. PWM signals on IO42-IO49, telemetry on S2;
+3. PWM signals on SERVO1-8 (IO42-IO47, IO54, IO55), telemetry on S2;
 4. ELVH on a board where it is connected: `DiffPress` close to 0 with the pitot covered and a plausible `Temp`;
 5. ArduRover on the board.
-6. V1.5: boot and telemetry on USB and Wi-Fi; SCH16T, both BMP581 and RM3100 detected on their buses; GPS on SERIAL3 (IO3/IO4); PWM on SERVO7-8 (IO54/IO55); a DroneCAN node seen by the GCS.
-7. SD card: "sdcard is mounted" on the console, logs in `/SDCARD/APM/LOGS`, `BARO` and `MAG` sample intervals while logging; main loop rate and core load with the log on.
-8. LP core: `@SYS/threads.txt` with every channel and the watchdog armed; a main loop stall reported to the GCS; the reboot of the LP watchdog and its post-mortem read over Wi-Fi.
+6. V1.5: the RM3100 on IO2, not detected; GPS on SERIAL3 (IO3/IO4); a DroneCAN node seen by the GCS; telemetry over Wi-Fi; LEDs.
+7. SD memory: mounted after a software reboot (from the GCS, or by the LP watchdog) without a power cycle; a log written when armed; `BARO` and `MAG` sample intervals while logging; main loop rate and core load with the log on.
+8. LP core: a main loop stall reported to the GCS (`MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN` 42/24/71/97, a 250 ms loop); the reboot of the LP watchdog (42/24/71/93, a main loop lockup) and its post-mortem in `@SYS/threads.txt`, on the GCS and in `LPPM`.
 9. `HAL_ESP32_LP_PC_SAMPLING 1` alone, with the board at hand.
