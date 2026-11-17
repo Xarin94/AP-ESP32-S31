@@ -214,6 +214,7 @@ class ESP32HWDef(hwdef.HWDef):
             seriallist.append(f"{{ .port={port}, .rx={rxpin}, .tx={txpin} }}")
 
         self.write_device_table(f, 'serial devices', 'HAL_ESP32_UART_DEVICES', seriallist)
+        f.write(f"#define HAL_ESP32_UART_COUNT {len(seriallist)}\n")
 
     def write_RCOUT_config(self, f):
         '''write rc output defines'''

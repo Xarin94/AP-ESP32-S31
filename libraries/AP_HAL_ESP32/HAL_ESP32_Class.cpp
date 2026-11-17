@@ -51,7 +51,12 @@ static Empty::UARTDriver serial1Driver;
 #endif
 static ESP32::UARTDriver serial2Driver(2);
 static ESP32::UARTDriver serial3Driver(1);
+#if defined(HAL_ESP32_UART_COUNT) && HAL_ESP32_UART_COUNT > 3
+// the fourth ESP32_SERIAL line is SERIAL4
+static ESP32::UARTDriver serial4Driver(3);
+#else
 static Empty::UARTDriver serial4Driver;
+#endif
 static Empty::UARTDriver serial5Driver;
 static Empty::UARTDriver serial6Driver;
 static Empty::UARTDriver serial7Driver;
