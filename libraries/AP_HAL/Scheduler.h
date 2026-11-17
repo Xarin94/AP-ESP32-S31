@@ -44,6 +44,16 @@ public:
     virtual bool     in_expected_delay(void) const { return false; }
 
     /*
+      heartbeat of a long-running library thread, once per cycle of its
+      loop. A HAL that watches its threads from outside (ESP32-S31: the
+      LP core supervisor) measures the gaps; elsewhere it does nothing
+     */
+    enum class Heartbeat : uint8_t {
+        NAV_FILTER = 0,     // navigation filter thread
+    };
+    virtual void     heartbeat(Heartbeat id) {}
+
+    /*
       end the priority boost from delay_microseconds_boost()
      */
     virtual void     boost_end(void) {}
