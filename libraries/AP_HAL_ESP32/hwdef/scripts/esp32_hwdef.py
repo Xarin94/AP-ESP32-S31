@@ -122,7 +122,7 @@ class ESP32HWDef(hwdef.HWDef):
             if len(bus) != 5:
                 self.error(f"Badly formed ESP32_SPIBUS line {bus} {len(bus)=}")
             (host, dma_ch, mosi, miso, sclk) = bus
-            buslist.append(f"{{ .host={host}, .dma_ch={dma_ch}, .mosi={mosi}, .miso={miso}, .sclk={sclk} }},")
+            buslist.append(f"{{ .host={host}, .dma_ch={dma_ch}, .mosi={mosi}, .miso={miso}, .sclk={sclk} }}")
 
         self.write_device_table(f, "SPI buses", "HAL_ESP32_SPI_BUSES", buslist)
 
