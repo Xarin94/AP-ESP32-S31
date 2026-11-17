@@ -44,12 +44,6 @@
 
 #ifdef HAL_ESP32_SDCARD
 
-#if CONFIG_IDF_TARGET_ESP32S2 ||CONFIG_IDF_TARGET_ESP32C3
-#define SPI_DMA_CHAN    host.slot
-#else
-#define SPI_DMA_CHAN    1
-#endif
-
 sdmmc_card_t* card = nullptr;
 
 const size_t buffer_size = 8*1024;
@@ -198,6 +192,12 @@ void mount_sdcard()
 #ifdef HAL_ESP32_SDSPI
 ESP32::SPIBusDesc bus_ = HAL_ESP32_SDSPI;
 
+// SD clock after the card is identified (the identification runs at
+// SDMMC_FREQ_PROBING, 400 kHz)
+#ifndef HAL_ESP32_SDSPI_MAX_FREQ_KHZ
+#define HAL_ESP32_SDSPI_MAX_FREQ_KHZ SDMMC_FREQ_PROBING
+#endif
+
 void mount_sdcard_spi()
 {
 
@@ -222,7 +222,7 @@ void mount_sdcard_spi()
     };
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    //TODO change to sdspi_host_init_device for spi sharing
+    host.slot = bus_.host;
     spi_bus_config_t bus_cfg = {
         .mosi_io_num = bus_.mosi,
         .miso_io_num = bus_.miso,
@@ -231,18 +231,20 @@ void mount_sdcard_spi()
         .quadhd_io_num = -1,
         .max_transfer_sz = 4000,
     };
-    ret = spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, SPI_DMA_CHAN);
-    if (ret != ESP_OK) {
+    // the card can share the host with the sensors of an ESP32_SPIBUS line on
+    // the same pins: whichever starts second finds the bus already set up
+    ret = spi_bus_initialize(bus_.host, &bus_cfg, bus_.dma_ch);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "Failed to initialize bus.");
         return;
     }
 
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
     slot_config.gpio_cs = bus_.cs;
-    slot_config.host_id = (spi_host_device_t)host.slot;
+    slot_config.host_id = bus_.host;
 
     //host.flags = SDMMC_HOST_FLAG_1BIT | SDMMC_HOST_FLAG_DDR;
-    host.max_freq_khz = SDMMC_FREQ_PROBING;
+    host.max_freq_khz = HAL_ESP32_SDSPI_MAX_FREQ_KHZ;
     ret = esp_vfs_fat_sdspi_mount("/SDCARD", &host, &slot_config, &mount_config, &card);
 
     if (ret == ESP_OK) {
