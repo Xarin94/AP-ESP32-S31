@@ -1,11 +1,12 @@
 # ArduPilot on the MINI AHRS board (ESP32-S31)
 
-Standard ArduPilot, with EKF3, ported to the ESP32-S31 (ESP-IDF 6.1) for the MINI AHRS V1.2 board, module ESP32-S31-WROOM-1-N16R16V.
+Standard ArduPilot, with EKF3, ported to the ESP32-S31 (ESP-IDF 6.1) for the MINI AHRS V1.5 board, module ESP32-S31-WROOM-1-N16R16V. Up to release 0.0.2 the board was the V1.2: its pinout is in the tag `v0.0.2`.
 
 - Board: `esp32s31mini`, hwdef in this directory.
 - Base: ArduPilot master `dc78bc5` (October 2026).
-- Vehicles: ArduPlane, ArduRover, ArduCopter (8 PWM outputs, no CAN, see below).
+- Vehicles: ArduPlane, ArduRover, ArduCopter (8 PWM outputs, DroneCAN, see below).
 - Navigation: ArduPilot AHRS/EKF3, unmodified (`AHRS_EKF_TYPE 3`, the default).
+- The LP core, the third CPU of the S31, supervises the threads of the two main cores and resets the board when the main loop stops: see [LP core](#lp-core-supervisor-watchdog-and-diagnostics).
 
 ## Build
 
@@ -22,7 +23,7 @@ Run `./waf configure` again after every change to `hwdef.dat`. The images are in
 
 ## Prebuilt firmware
 
-[`firmware/plane`](firmware/plane) and [`firmware/rover`](firmware/rover) hold the ready-to-flash images of release 0.0.2 (tag `v0.0.2`, ArduPlane / ArduRover V4.8.0-dev, ESP-IDF v6.1, flash in QIO): `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. ArduPlane was tested on the board, ArduRover is built from the same code but was not started on the board. They are not rebuilt automatically: a later commit may change the code without changing them. The images of release 0.0.1 (tag `v0.0.1`, [GitHub release](https://github.com/Xarin94/AP-ESP32-S31/releases/tag/v0.0.1)) read the flash in DIO: with a GPS fix and EKF3 using it they hold the main loop at about 177 Hz instead of 200.
+[`firmware/plane`](firmware/plane) and [`firmware/rover`](firmware/rover) hold the ready-to-flash images of release 0.0.2 (tag `v0.0.2`, ArduPlane / ArduRover V4.8.0-dev, ESP-IDF v6.1, flash in QIO): `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. ArduPlane was tested on the board, ArduRover is built from the same code but was not started on the board. They are not rebuilt automatically: a later commit may change the code without changing them. They are built for the V1.2 pinout and do not match the V1.5 (IMU bus, compass chip select, GPS serial, CAN, SERVO7-8): on a V1.5 board build the firmware from the sources. The images of release 0.0.1 (tag `v0.0.1`, [GitHub release](https://github.com/Xarin94/AP-ESP32-S31/releases/tag/v0.0.1)) read the flash in DIO: with a GPS fix and EKF3 using it they hold the main loop at about 177 Hz instead of 200.
 
 ## Flashing
 
@@ -49,25 +50,29 @@ If Windows reports "USB device not recognized": with the USB unplugged, connect 
 
 | Function | GPIO | ArduPilot |
 |---|---|---|
-| SPI SCK / MOSI / MISO | 20 / 21 / 22 | `ESP32_SPIBUS SPI2_HOST` |
-| SCH16T CS / RESET / DRY | 25 / 17 / 19 | `IMU SCH16T`, `ROTATION_ROLL_180`, `HAL_SCH16T_RESET_PIN 17`; DRY not used |
+| SPI bus 1 (IMU only) SCK / MOSI / MISO | 20 / 21 / 22 | `ESP32_SPIBUS SPI2_HOST` |
+| SCH16T CS | 25 | `IMU SCH16T`, `ROTATION_ROLL_180`; no RESET or DRY line on the V1.5 |
+| SPI bus 2 (sensors and SD) SCK / MOSI / MISO | 35 / 36 / 37 | `ESP32_SPIBUS SPI3_HOST` |
 | BMP581 #1 / #2 CS | 23 / 24 | `BARO BMP581` x2 |
-| RM3100 CS | 38 | `COMPASS RM3100`, `ROTATION_ROLL_180` (module upside down under the board) |
-| ELVH CS | 18 | airspeed `SPI:elvh`, `ARSPD_TYPE 21` |
-| UART1 RX / TX | 8 / 9 (connector S1) | SERIAL3, GPS |
+| RM3100 CS (`CSmag`) | 2 | `COMPASS RM3100`, `ROTATION_ROLL_180` (module upside down under the board) |
+| ELVH CS (`TOT`) | 38 | airspeed `SPI:elvh`, `ARSPD_TYPE 21` |
+| microSD CS (`cssd`) | 39 | `ESP32_SDSPI SPI3_HOST`, logs in `/SDCARD/APM/LOGS` |
+| GPS serial RX / TX (`rxgps` / `txgps`) | 3 / 4 | SERIAL3, GPS |
 | UART2 RX / TX | 10 / 11 (connector S2) | SERIAL2, telemetry or serial RC (CRSF/ELRS: `SERIAL2_PROTOCOL 23`) |
+| UART1 RX / TX | 8 / 9 (connector S1) | **SERIAL4** (SERIAL3 on the V1.2) |
 | USB D- / D+ | 33 / 34 | SERIAL0 (USB Serial/JTAG, MAVLink) and ESP-IDF console |
-| SERVO1-8 | 42-49 | `ESP32_RCOUT`, MCPWM; outputs 1-2, 3-4, 5-6, 7-8 share a timer (one frequency) |
+| CAN TX / RX (MCP2542FD) | 57 / 56 | `ESP32_CAN`, DroneCAN |
+| SERVO1-8 | 42, 43, 44, 45, 46, 47, 54, 55 | `ESP32_RCOUT`, MCPWM; outputs 1-2, 3-4, 5-6, 7-8 share a timer (one frequency) |
 | LED1 / LED2 | 13 / 12 | status LEDs, see below |
 | Wi-Fi | — | SERIAL1, access point `ardupilot-s31` (password `ardupilot1`), UDP 192.168.4.1:14550 |
 
-Notes on the V1.2 board, measured on the hardware:
-- Connectors S1 and S2 are not on the schematic pins (10/11 and 12/13) but on IO8/IO9 and IO10/IO11. The pin marked `R` is the board RX: connect it to the TX of the device.
-- The LEDs are on IO13 and IO12, not on IO14 and IO15 as in the schematic. LED3 (IO16) is not used.
-- The `CSmag` line (IO18) reads 0 V at the module and kept the RM3100 always selected: the RM3100 CS is bridged to IO38. IO18 stays as the ELVH CS, which is not connected on the V1.2 test board.
-- CAN (MCP2542FD): TXD and RXD reach no readable GPIO, so CAN is not configured (no `ESP32_CAN` lines, no DroneCAN). The HAL already has the CAN (TWAI) driver: on a board with CAN wired, `ESP32_CAN <TX> <RX>` in the hwdef is enough.
-- No dedicated RC input: RC comes from a serial protocol.
-- No SD card: logging, scripting and the filesystem are disabled.
+Notes on the V1.5 board:
+- On the V1.2 the module pads 42-53 were not on the GPIO of the schematic. The V1.5 keeps UART1, UART2 and the LEDs on the same pads, so they stay on the GPIOs measured on the V1.2: connectors S1 and S2 on IO8/IO9 and IO10/IO11 (schematic 10/11 and 12/13), LEDs on IO13 and IO12 (schematic IO14 and IO15). The pin marked `R` is the board RX: connect it to the TX of the device. LED3 is not used.
+- CAN, `CSmag`, the GPS serial, the SD card and SERVO7-8 are on new pins, taken from the schematic.
+- The IMU has its own SPI bus: the SCH16T read at 1 kHz no longer waits for the baros, the compass, the airspeed sensor or the SD card.
+- IO36 and IO37 (MOSI and MISO of SPI bus 2) are strapping pins. IO36 has a pull-up in the module; IO37 has none and, according to the datasheet, must not float at reset (with the eFuses it selects the JTAG source).
+- No dedicated RC input: RC comes from a serial protocol or DroneCAN.
+- Scripting is disabled.
 
 The SCH16T and RM3100 rotations should be checked by rotating the board by hand (see below).
 
@@ -118,16 +123,17 @@ EKF3 takes its process noises as the standard deviation per prediction step divi
 | `EK3_MAG_M_NSE` (Gauss) | RM3100 at cycle count 200 (the driver setting): 15 nT | 1.5·10⁻⁴ | 0.05 | default |
 
 - **Offsets (GBIAS, ABIAS).** The strength of the K10 is the stability of its offsets: the random walk from the datasheet is 10 times (gyro) and 25 times (accel) below the EKF3 defaults, which are the top of their range. With these values EKF3 learns the offsets more slowly and with less noise. An offset changing faster than expected is still covered by `EK3_GYRO_P_NSE` and `EK3_ACC_P_NSE`, left at their defaults.
-- **White noise (GYRO, ACC).** The white noise of the K10 is in the same class as the common MEMS parts the EKF3 defaults are tuned for. The defaults are about 15 times (gyro) and 50 times (accel) the sensor-only value: that is the margin for vibration, clipping, scale factor and timing errors, which depend on the installation and not on the datasheet. Values with a 5× and 4× margin would be 4.8·10⁻³ and 2.9·10⁻². Try them only while watching the innovations in telemetry (`EKF_STATUS_REPORT`, ratios below 1, first on the ground and then in flight): the board has no log.
+- **White noise (GYRO, ACC).** The white noise of the K10 is in the same class as the common MEMS parts the EKF3 defaults are tuned for. The defaults are about 15 times (gyro) and 50 times (accel) the sensor-only value: that is the margin for vibration, clipping, scale factor and timing errors, which depend on the installation and not on the datasheet. Values with a 5× and 4× margin would be 4.8·10⁻³ and 2.9·10⁻². Try them only while watching the innovations (`EKF_STATUS_REPORT` in telemetry or `XKF3`/`XKF4` in the log, ratios below 1, first on the ground and then in flight).
 - **Compass (MAG_M_NSE).** The 15 nT of the RM3100 are 70 times below the minimum EKF3 accepts in the fusion (0.01 Gauss). The measurement error comes from the calibration residual (`COMPASS_CAL_FIT` accepts up to 16 mGauss) and from currents near the compass, that is from the installation. With a good calibration (fit below 5 mGauss) and no current interference, 0.02 can be tried.
 
 These values are for the K10. The full K01 datasheet was not available.
 
 ### SPI bus
 
-- ESP-IDF takes at most 6 devices per SPI host, and an `ESP32_SPIDEV` line with `LoSpeed` different from `HiSpeed` takes two of them. Today: SCH16T 2, BMP581 1 + 1, RM3100 1, ELVH 1 = 6. One more device stops the boot with `SPI: no room for <name> on its bus`.
-- Every device on the bus must be listed, even without a driver, so that its chip select stays high. The HAL drives every CS high before the buses are set up.
-- Part limits: SCH16T 10 MHz, BMP581 12 MHz, RM3100 1 MHz, ELVH 800 kHz.
+- Two buses: SPI2 (`ESP32_SPIBUS` line 0) has only the SCH16T, SPI3 (line 1) the two BMP581, the RM3100, the ELVH and the SD card.
+- ESP-IDF takes at most 6 devices per SPI host, and an `ESP32_SPIDEV` line with `LoSpeed` different from `HiSpeed` takes two of them. Today: SPI2 SCH16T 2; SPI3 BMP581 1 + 1, RM3100 1, ELVH 1, SD 1 = 5. One more device stops the boot with `SPI: no room for <name> on its bus`.
+- Every device on the bus must be listed, even without a driver, so that its chip select stays high. The HAL drives every CS high before the buses are set up: the `sdcs` line, opened by no driver, keeps the SD card deselected until the SD driver takes it.
+- Part limits: SCH16T 10 MHz, BMP581 12 MHz, RM3100 1 MHz, ELVH 800 kHz. The SD card is identified at 400 kHz, then runs at `HAL_ESP32_SDSPI_MAX_FREQ_KHZ` (20 MHz).
 - To read only one barometer, remove the second `BARO` line and keep its `ESP32_SPIDEV` line.
 
 ### Sensor orientation
@@ -145,13 +151,21 @@ New driver `AP_Airspeed_ELVH`: All Sensors ELVH differential pressure sensors wi
 
 ### GPS
 
-`defaults.parm` sets a u-blox on SERIAL3 at 460800 (`SERIAL3_BAUD 460`) with `GPS_AUTO_CONFIG 0`: with auto-configuration the driver accepts the u-blox only at 230400, so the module must already be configured to send UBX (NAV-PVT and DOP) at 460800 and saved to its flash. The GPS is powered by the board: after a USB replug it does a cold start. On ArduPlane EKF3 starts only with a 3D fix: until then the AHRS runs on DCM and the PreArm check reports "AHRS: not using configured AHRS type".
+`defaults.parm` sets a u-blox on the GPS serial (IO3/IO4, SERIAL3) at 460800 (`SERIAL3_BAUD 460`) with `GPS_AUTO_CONFIG 0`: with auto-configuration the driver accepts the u-blox only at 230400, so the module must already be configured to send UBX (NAV-PVT and DOP) at 460800 and saved to its flash. The GPS is powered by the board: after a USB replug it does a cold start. On ArduPlane EKF3 starts only with a 3D fix: until then the AHRS runs on DCM and the PreArm check reports "AHRS: not using configured AHRS type". A GPS on connector S1 is now on SERIAL4: to use it as GPS1 set `SERIAL3_PROTOCOL -1`, `SERIAL4_PROTOCOL 5` and `SERIAL4_BAUD 460`. If the GPS sends nothing, try `SERIAL3_OPTIONS 8` (RX/TX swap).
+
+### SD card and logs
+
+The microSD card is in SPI mode on SPI bus 2, with the sensors. The IO thread mounts it at boot and, while disarmed, retries every 3 s; the logs go to `/SDCARD/APM/LOGS` (`LOG_BACKEND_TYPE 1`, the default) and can be downloaded over MAVLink. The log writer runs in a low priority thread and writes from a RAM buffer, but the SD driver holds the shared bus for a whole command, including the busy wait of the card, and meanwhile the baros, the compass and the airspeed sensor wait. While logging, check the sample intervals of `BARO` and `MAG`; the LP core reports the gaps of the bus thread (channel `SPI1`, see [LP core](#lp-core-supervisor-watchdog-and-diagnostics)). If the card does not mount or the log has write errors, lower `HAL_ESP32_SDSPI_MAX_FREQ_KHZ`.
+
+### CAN
+
+TWAI controller on the MCP2542FD transceiver, TX IO57 and RX IO56. `defaults.parm` enables DroneCAN at 1 Mbit/s (`CAN_P1_DRIVER 1`, `CAN_D1_PROTOCOL 1`); the servos stay on PWM (`CAN_D1_UC_SRV_BM 0`), a DroneCAN servo or ESC is added with `CAN_D1_UC_SRV_BM` / `CAN_D1_UC_ESC_BM`. DroneCAN compasses are enabled.
 
 ### Serial ports and telemetry
 
 - SERIAL0: USB Serial/JTAG, MAVLink and the ESP-IDF console (start-up log, HAL messages, panics) on the same port; a GCS skips the text. With DTR low and RTS high the USB Serial/JTAG resets the chip, and on the S31 (chip revision v0.0) `HAL_ESP32_USB_NO_CHIP_RESET` does not stop it, although the disable bit reads back set. Linux raises DTR and RTS when the port is opened and pyserial (pymavlink, MAVProxy) then lowers DTR first, which resets the board: it reboots in a few seconds. To connect without a reset, open the port and lower RTS before DTR (pyserial: `s = serial.Serial(port); s.rts = False; s.dtr = False`).
 - SERIAL1: Wi-Fi UDP.
-- SERIAL2, SERIAL3: UARTs on S2 and S1. The ESP32 HAL supports `SERIALn_OPTIONS` bit 3 (RX/TX swap).
+- SERIAL2: UART on connector S2. SERIAL3: GPS serial (IO3/IO4). SERIAL4: UART on connector S1. The ESP32 HAL supports `SERIALn_OPTIONS` bit 3 (RX/TX swap).
 - Stream rates are per MAVLink channel (`MAVn_*`): SERIAL0 is MAV1, Wi-Fi MAV2, SERIAL2 MAV3.
 
 ## Live FFT
@@ -175,11 +189,48 @@ Arming, pre-arm and calibration states are shown by the GCS.
 | Core | Threads |
 |---|---|
 | HP CPU0 | main loop (vehicle, AHRS/EKF3), timer, UART |
-| HP CPU1 | SPI bus thread (SCH16T at 1 kHz, baros, compass; priority 24, above Wi-Fi), Wi-Fi/lwIP, IO, storage, RC, library threads (live FFT) |
+| HP CPU1 | SPI bus threads (SCH16T at 1 kHz on its bus; baros, compass and airspeed on the other; priority 24, above Wi-Fi), Wi-Fi/lwIP, IO (SD mount), storage, RC, library threads (DroneCAN, logger, live FFT), `APM_LPSV` (LP core supervisor) |
+| LP core | supervisor of the HP threads and watchdog of the main loop, see below |
 
-The main loop runs at 200 Hz (`SCHED_LOOP_RATE` in `defaults.parm`). Measured with ArduPlane, a GPS fix with EKF3 using it and the live FFT on (`INS_FFT_LIVE 1`): core 0 at 61%, core 1 at 35%, scheduler load 61%. The code runs from the flash through a 16 kB instruction cache, so the flash mode counts: in DIO, the same load took core 0 to 88% and held the loop at 177 Hz ("Main loop slow"), while without the GPS fix it stayed at 200 Hz; compiling for speed (`-O2`) instead of size made no difference. Without a GPS fix the main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
+The main loop runs at 200 Hz (`SCHED_LOOP_RATE` in `defaults.parm`). Measured on the V1.2 (one SPI bus for all the sensors, no log, no CAN) with ArduPlane, a GPS fix with EKF3 using it and the live FFT on (`INS_FFT_LIVE 1`): core 0 at 61%, core 1 at 35%, scheduler load 61%. The code runs from the flash through a 16 kB instruction cache, so the flash mode counts: in DIO, the same load took core 0 to 88% and held the loop at 177 Hz ("Main loop slow"), while without the GPS fix it stayed at 200 Hz; compiling for speed (`-O2`) instead of size made no difference. Without a GPS fix the main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
+
+The V1.5 adds the second SPI bus thread, the log writer and DroneCAN on core 1, and the log messages on the main loop: its load has not been measured yet.
 
 Set from the hwdef: `HAL_ESP32_FASTCPU`, `HAL_ESP32_SLOWCPU`, `HAL_ESP32_DEVICE_BUS_CPU`, `HAL_ESP32_THREAD_CPU` (and `HAL_ESP32_CAN_THREAD_CPU`, `HAL_ESP32_IO_THREAD_CPU`). The load is sent in telemetry: `SYS_STATUS.load` is the busiest core, measured from the FreeRTOS idle time; `NAMED_VALUE_FLOAT` `CPU0` and `CPU1` give each core in %.
+
+## LP core: supervisor, watchdog and diagnostics
+
+The S31 has a third core, the LP core: RISC-V at 40 MHz (from the crystal, `CONFIG_RTC_FAST_CLK_SRC_XTAL`) with 32 KB of LP RAM. On this board it supervises the threads of the two HP cores (`define HAL_ESP32_LP_SUPERVISOR 1` in the hwdef). It runs from LP RAM and works only on LP RAM, so it keeps running while the HP cores are stopped: flash erase, deadlock, crash. It starts at the end of the vehicle setup.
+
+How it works:
+- Every HAL thread stores a counter in LP RAM at each cycle: main loop, timer, UART, RCIN, RCOUT, IO, storage, the SPI bus threads and the idle tasks of the two cores. On the HP cores it costs one store, without waits or locks. A library thread can do the same with `hal.scheduler->heartbeat()` (channel `NAV`, for a navigation filter in its own thread; EKF3 runs in the main loop, so it is not used here).
+- The LP core reads the counters every millisecond and measures for each the time without progress: maximum since the start, maximum of the last second, number of stalls (gaps over the threshold of the channel). For the idle tasks it is the longest time the core was never idle.
+- When a gap passes its threshold it records an event with the scheduler task the main loop was in and the last MAVLink command. A task on HP core 1 (`APM_LPSV`, 50 Hz, top priority, a few microseconds) copies these two values to LP RAM.
+- Watchdog: if the main loop makes no progress for `HAL_ESP32_LP_WDT_MS` (2000 ms) outside an `expect_delay_ms()`, the LP core writes a post-mortem to RTC memory (task, MAVLink command and message, age of every channel) and asks for a reboot; `APM_LPSV` does it with `esp_system_abort()`, the panic path of the task watchdog. It is switched off with bit 0 of `BRD_OPTIONS` (default 1 on this board; with 0 the LP core only measures). The ESP-IDF task watchdog (3 s on core 0) stays as backstop for a stop of both cores.
+- `expect_delay_ms()` is now implemented by the ESP32 HAL: the operations that announce a long delay of the main loop (parameter erase, calibrations) do not trip the watchdog, which restarts its timeout at the end of the delay.
+- The HP side collects the results in the IO thread, once a second (the events at 10 Hz), and writes them to the log and to the GCS: nothing blocking on the threads that matter.
+- The PC of the two HP cores (from the bus monitor, an HP peripheral) is in the events and in the post-mortem only with `define HAL_ESP32_LP_PC_SAMPLING 1`. It is off because it is not verified on the board.
+- Start guard (`HAL_ESP32_LP_START_GUARD`, on): a flag in NVS marks the start of the LP core and is cleared after 10 s of operation. If a start never confirms it, the next boot skips the LP core (`LP supervisor skipped` to the GCS) and the boot after that tries again, so that a start that hung the chip cannot leave the board unreachable. A reboot within 10 s of the LP start counts as an incomplete start.
+
+Where to read the results:
+
+| Where | What |
+|---|---|
+| `@SYS/threads.txt` (MAVFTP: Mission Planner, or MAVProxy `ftp get @SYS/threads.txt`) | per channel: age, maximum of the last second, maximum, stalls, threshold; last stalls with task and MAVLink command; reason of the last reset and post-mortem |
+| log `LPSV` | each second, per channel: `WMax` (last second), `Max`, `NSt` (stalls), `Age` |
+| log `LPEV` | each stall: channel, length, task, MAVLink command, `PC0`/`PC1` (0 without PC sampling) |
+| log `LPPM` | after a reset of the LP watchdog, each second for the whole session |
+| GCS | `LP: main stall N ms in <task>` (main loop stalls of 200 ms or more), `LP wdog reset: MAIN N ms in <task>` and `LP wdog: MAVLink cmd … msg …` after the reboot, `LP supervisor stopped` if the LP core stops, `LP supervisor skipped: last start incomplete` (start guard), `Last reset: panic` (or task watchdog, brownout…) after an abnormal reset |
+
+The post-mortem lives in RTC memory: it survives the reboot but not a power cycle. If the USB serial does not come back after the reboot, read it over Wi-Fi before unplugging the USB.
+
+With PC sampling on, a PC is translated to function and line with `riscv32-esp-elf-addr2line -pfiaC -e build/esp32s31mini/esp-idf_build/ardupilot.elf 0x…` (with the ELF of the same build).
+
+Stall thresholds in ms (`LPSupervisor.cpp`): `MAIN` 100, `TIMR`/`UART` 20, `RCIN`/`RCOU` 50, `IO`/`STOR` 500, `NAV` 100, `IDL0`/`IDL1` 500, bus threads 60 (`SPI0` IMU bus, `SPI1` sensor and SD bus).
+
+Code:
+- `targets/esp32s31/esp-idf/components/lp_supervisor/`: the LP program (`lp/lpsv_lp.c`), the HP loader (`lpsv.c`) and the shared memory (`include/lpsv_shared.h`). An ESP-IDF component built with the ULP rules and embedded in the application; `sdkconfig.defaults` enables the LP core and reserves 8 KB of LP RAM for it.
+- `AP_HAL_ESP32/LPSupervisor.{h,cpp}`: start and start guard, heartbeats, `APM_LPSV` task, statistics, events, log and messages; hooks in `Scheduler.cpp` (HAL threads, `expect_delay_ms()`), `DeviceBus.cpp` (bus threads), `Util.cpp` (`@SYS/threads.txt`).
 
 ## Changes to ArduPilot
 
@@ -193,10 +244,13 @@ ESP32 HAL on ESP-IDF 6.1:
 - Console on the USB Serial/JTAG (`sdkconfig.defaults`): UART0 is not routed on the board.
 - `Scheduler`, `DeviceBus`, `WiFi*`: cores set from the hwdef, bus and library threads with a fixed affinity.
 - `SPIDevice`: short transfers (≤ 64 bytes) polled; all CS driven high before any bus setup; stop at boot when an SPI host has no room for a device.
-- `Util`: load of each core from the FreeRTOS idle time.
+- `Util`: load of each core from the FreeRTOS idle time; LP core results in `@SYS/threads.txt`.
+- `LPSupervisor` (new) and the `lp_supervisor` ESP-IDF component (new): supervisor, watchdog and diagnostics of the HP threads on the LP core; `Scheduler`: heartbeats of the HAL threads, `expect_delay_ms()` and `in_expected_delay()`; `DeviceBus`: heartbeat of the bus threads.
+- `SdCard`: SD card in SPI mode on a host shared with the sensors, host and DMA channel from the `ESP32_SDSPI` line, clock from `HAL_ESP32_SDSPI_MAX_FREQ_KHZ`.
+- `HAL_ESP32_Class.cpp`: a fourth `ESP32_SERIAL` line is SERIAL4.
 - `Semaphores`: waits rounded up to the next tick.
 - Legacy RMT (PWM/PPM RC input) and software I2C (Xtensa only) made conditional; MCPWM capabilities from `mcpwm_ll.h`; empty I2C table allowed; `ffconf.h` with `MIN`/`MAX`; `RCOutput` without outputs.
-- `esp32_hwdef.py`: `ESP32_CAN TX RX` keyword.
+- `esp32_hwdef.py`: `ESP32_CAN TX RX` keyword; `HAL_ESP32_UART_COUNT`; no double comma in the SPI bus table, so a board with two buses compiles.
 
 Drivers and libraries:
 - `AP_InertialSensor_SCH16T` (new): Murata SCH16T-K01/K10 directly on SPI.
@@ -205,6 +259,8 @@ Drivers and libraries:
 - `AP_Baro_BMP581`: soft reset before the power-on check, so the baro starts after a reboot without a power cycle.
 - `AP_Notify`: `AP_BoardLED_InitGPS`, the two status LEDs.
 - `GCS_MAVLink`: `SYS_STATUS.load` from the core load when the HAL measures it, `NAMED_VALUE_FLOAT` `CPU0`/`CPU1`.
+- `AP_HAL::Scheduler::heartbeat()`: heartbeat of long-running library threads, for a HAL that watches its threads from outside; does nothing elsewhere.
+- `AP_Scheduler::task_name()`: name of a task from the index in `persistent_data.scheduler_task`, for the stall reports.
 - ArduPlane: `PLANE_GCS_SEND_TIME_US`, the per-loop time of `update_send` set by the board (750 µs here for the 200 Hz loop; at 50 Hz the board needs 3 ms).
 
 ## Status
@@ -219,9 +275,15 @@ Release 0.0.2, checked on the V1.2 board with ArduPlane, at rest with a GPS 3D f
 
 Release 0.0.1 also checked the Wi-Fi access point, the BMP581 after a reset over USB and the 8 PWM channels set up (`RCOutput::init()` reports 8).
 
+The V1.5 pinout and the LP core supervisor come from the V1.5 bench board; with this firmware (EKF3) they have not been run on the board yet.
+
 Still to check:
 1. EKF3 with GPS and compass in motion and in flight;
 2. IMU variant and rotation, compass rotation, calibrations;
 3. PWM signals on IO42-IO49, telemetry on S2;
 4. ELVH on a board where it is connected: `DiffPress` close to 0 with the pitot covered and a plausible `Temp`;
 5. ArduRover on the board.
+6. V1.5: boot and telemetry on USB and Wi-Fi; SCH16T, both BMP581 and RM3100 detected on their buses; GPS on SERIAL3 (IO3/IO4); PWM on SERVO7-8 (IO54/IO55); a DroneCAN node seen by the GCS.
+7. SD card: "sdcard is mounted" on the console, logs in `/SDCARD/APM/LOGS`, `BARO` and `MAG` sample intervals while logging; main loop rate and core load with the log on.
+8. LP core: `@SYS/threads.txt` with every channel and the watchdog armed; a main loop stall reported to the GCS; the reboot of the LP watchdog and its post-mortem read over Wi-Fi.
+9. `HAL_ESP32_LP_PC_SAMPLING 1` alone, with the board at hand.

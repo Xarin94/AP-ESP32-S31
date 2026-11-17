@@ -1,55 +1,88 @@
-# MINI AHRS board V1.2 — ESP32-S31-WROOM-1-N16R16V
+# MINI AHRS board V1.5 — ESP32-S31-WROOM-1-N16R16V
 #
-# Sensors on one SPI bus: SCH16T IMU, RM3100 magnetometer, 2x BMP581,
-# ELVH-L02D differential pressure. PWM outputs SERVO1-8 on IO42-IO49.
+# SCH16T IMU alone on the first SPI bus; 2x BMP581, RM3100 magnetometer,
+# ELVH-L02D differential pressure and the microSD on the second. PWM outputs
+# SERVO1-8, CAN on the MCP2542FD, GPS serial on IO3/IO4.
 #
 # Module pins not available (datasheet S31): GPIO26-28/30-32 flash,
-# GPIO29/41 not bonded, GPIO33/34 USB Serial/JTAG, GPIO36/37/60/61 strapping.
+# GPIO29/41 not bonded, GPIO33/34 USB Serial/JTAG. Strapping pins: GPIO36/37
+# are MOSI/MISO of the second SPI bus, GPIO60/61 are not used.
+#
+# On the V1.2 board the module pads 42-53 were not on their schematic GPIO
+# (UART1, UART2 and the LEDs found on other GPIOs, CAN and CSmag on none). The
+# V1.5 keeps UART1, UART2 and the LEDs on the same pads, so they stay on the
+# GPIOs measured on the V1.2; CAN, CSmag, the GPS serial, the SD card and
+# SERVO7-8 moved to new pins, taken from the schematic.
 
 define HAL_ESP32_BOARD_NAME "esp32s31mini"
 
 # Dual core layout (HP CPU0 / HP CPU1):
 #  core 0: main loop (vehicle code, AHRS/EKF3), timer and UART threads
-#  core 1: SPI bus thread (SCH16T at 1 kHz, baros, compass), Wi-Fi/lwIP, IO,
-#          storage, RC and library threads
-# The SPI bus thread takes about a third of a core: on core 0 the main loop
-# reached 190 Hz, on core 1 about 300 Hz. On core 1 its priority (24) is above
-# Wi-Fi (23)
+#  core 1: SPI bus threads (SCH16T at 1 kHz on its bus; baros, compass and
+#          airspeed on the other), Wi-Fi/lwIP, IO (SD mount), storage, RC,
+#          DroneCAN, logger and library threads
+# On the V1.2, with every sensor on one bus, the SPI bus thread took about a
+# third of a core: on core 0 the main loop reached 190 Hz, on core 1 about
+# 300 Hz. On core 1 the bus threads run at priority 24, above Wi-Fi (23)
 define HAL_ESP32_FASTCPU 0
 define HAL_ESP32_SLOWCPU 1
 define HAL_ESP32_DEVICE_BUS_CPU 1
 define HAL_ESP32_THREAD_CPU 1
 
-# SPI Buses
+# LP core (third CPU, 40 MHz, runs from LP RAM): supervises the HP threads
+# from outside. Each thread stores a heartbeat counter in LP RAM; the LP core
+# measures the gaps (log LPSV/LPEV, @SYS/threads.txt), and when the main loop
+# makes no progress for HAL_ESP32_LP_WDT_MS it saves a post-mortem (reported
+# after the reboot, log LPPM) and asks for a reboot, done by a task on core 1.
+# The reboot follows BRD_OPTIONS bit 0, on by default here; the ESP-IDF task
+# watchdog (3 s, core 0) stays as backstop. HAL_ESP32_LP_PC_SAMPLING (PC of
+# the HP cores in the events) is off: not verified on the board
+define HAL_ESP32_LP_SUPERVISOR 1
+define HAL_ESP32_LP_WDT_MS 2000
+define HAL_BRD_OPTIONS_DEFAULT 1
+
+# SPI buses: the IMU alone on SPI2, the other sensors and the SD card on SPI3
 #            Host      DMA Channel     MOSI        MISO        SCLK
 ESP32_SPIBUS SPI2_HOST SPI_DMA_CH_AUTO GPIO_NUM_21 GPIO_NUM_22 GPIO_NUM_20
+ESP32_SPIBUS SPI3_HOST SPI_DMA_CH_AUTO GPIO_NUM_36 GPIO_NUM_37 GPIO_NUM_35
 
-# SPI Devices (chip selects are driven by the HAL; every device on the bus is
+# SPI Devices (chip selects are driven by the HAL; every device on a bus is
 # listed so its CS is deasserted before the bus is used). ESP-IDF takes at
-# most 6 devices per host and a device with two speeds counts twice: the
-# BMP581 has one speed, 1 MHz on the shared bus (a 50 Hz read of a few
-# bytes; the part takes up to 12 MHz)
+# most 6 devices per host and a device with two speeds counts twice:
+#   SPI2: SCH16T 2
+#   SPI3: BMP581 1 + 1, RM3100 1, ELVH 1, SD 1 = 5
+# The BMP581 keep 1 MHz (a 50 Hz read of a few bytes; the part takes up to
+# 12 MHz)
 #            Name      Bus Device ChipSel      Mode LoSpeed  HiSpeed
 ESP32_SPIDEV sch16t    0   0      GPIO_NUM_25  0    1*MHZ    8*MHZ
-ESP32_SPIDEV bmp581_1  0   1      GPIO_NUM_23  0    1*MHZ    1*MHZ
-ESP32_SPIDEV bmp581_2  0   2      GPIO_NUM_24  0    1*MHZ    1*MHZ
-# the CSmag line (IO18) reads 0 V at the module: the RM3100 CS is wired to the
-# unused airspeed CS (IO38, with its 10k pull-up) on this board
-ESP32_SPIDEV rm3100    0   3      GPIO_NUM_38  0    1*MHZ    1*MHZ
-ESP32_SPIDEV elvh      0   4      GPIO_NUM_18  0    500*KHZ  500*KHZ
+ESP32_SPIDEV bmp581_1  1   0      GPIO_NUM_23  0    1*MHZ    1*MHZ
+ESP32_SPIDEV bmp581_2  1   1      GPIO_NUM_24  0    1*MHZ    1*MHZ
+ESP32_SPIDEV rm3100    1   2      GPIO_NUM_2   0    1*MHZ    1*MHZ
+ESP32_SPIDEV elvh      1   3      GPIO_NUM_38  0    500*KHZ  500*KHZ
+# no driver opens it: listed so the HAL drives the SD chip select high at
+# boot, before the SD driver takes it
+ESP32_SPIDEV sdcs      1   4      GPIO_NUM_39  0    400*KHZ  400*KHZ
 
-# SCH16T variant mounted on the board (K10 by default; the V1.2 schematic
-# lists SCH16T-K01-10):
+# microSD in SPI mode on the second bus (shared with the sensors): logs.
+# 20 MHz after the card is identified at 400 kHz; lower it if the card does
+# not mount or the log has write errors
+define HAL_ESP32_SDCARD 1
+#           Host      DMA Channel     MOSI        MISO        SCLK        CS
+ESP32_SDSPI SPI3_HOST SPI_DMA_CH_AUTO GPIO_NUM_36 GPIO_NUM_37 GPIO_NUM_35 GPIO_NUM_39
+define HAL_ESP32_SDSPI_MAX_FREQ_KHZ 20000
+define AP_FILESYSTEM_ESP32_ENABLED 1
+define HAL_LOGGING_BACKENDS_DEFAULT 1
+define HAL_LOGGING_STACK_SIZE 4096
+
+# SCH16T variant mounted on the board (K10 by default):
 #   1  = SCH16T-K01, high precision, +-300 deg/s, +-8 g
 #   10 = SCH16T-K10, +-2000 deg/s, +-16 g
 define HAL_SCH16T_VARIANT 10
 
-# SCH16T: EXTRESN on GPIO17 (active low), DRY_SYNC on GPIO19 (unused: Data
-# Ready covers only the decimated outputs, the driver reads the interpolated
-# ones and stamps each sample at the read)
-define HAL_SCH16T_RESET_PIN 17
-# SCH16T internal low pass: LPF0, 68 Hz Butterworth 4th order on every axis
-# (the part default; datasheet minimum read rate 500 Hz), 66 dB down at the
+# SCH16T: no EXTRESN or DRY_SYNC line on the V1.5 (the driver does without
+# both: it reads the interpolated outputs and stamps each sample at the read)
+# internal low pass: LPF0, 68 Hz Butterworth 4th order on every axis (the
+# part default; datasheet minimum read rate 500 Hz), 66 dB down at the
 # ~450 Hz Nyquist of the 1 kHz read
 define HAL_SCH16T_LPF_CODE 0x000
 define HAL_SCH16T_SAMPLE_RATE 1000
@@ -58,13 +91,14 @@ define HAL_SCH16T_SAMPLE_RATE 1000
 # libraries/AP_InertialSensor/FFT_LIVE.md); the FFT thread runs on core 1
 define AP_INERTIALSENSOR_SPECTRUM_ENABLED 1
 
-# sensor axes: SCH16T x, -y, -z; the RM3100 module sits upside down under the
-# board (x, -y, -z), from a reading level and facing north
+# sensor axes as on the V1.2: SCH16T x, -y, -z; the RM3100 module sits upside
+# down under the board (x, -y, -z), from a reading level and facing north
 IMU SCH16T SPI:sch16t ROTATION_ROLL_180
 define HAL_INS_DEFAULT HAL_INS_NONE
 
 COMPASS RM3100 SPI:rm3100 false ROTATION_ROLL_180
 define AP_COMPASS_RM3100_ENABLED 1
+define AP_COMPASS_DRONECAN_ENABLED 1
 define AP_COMPASS_PROBING_ENABLED 0
 
 # to read only one barometer remove the second BARO line; keep its
@@ -74,22 +108,26 @@ BARO BMP581 SPI:bmp581_2
 define AP_BARO_BMP581_ENABLED 1
 
 # airspeed: ELVH-L02D-HRRD-C-NSA4 on SPI:elvh (+-2 inH2O, transfer function
-# A). ArduPlane: ARSPD_TYPE 21 and ARSPD_ELVH_RNG 3 (L02D) by default;
-# another part needs only ARSPD_ELVH_RNG. Other vehicles: ARSPD_TYPE 0, the
-# sensor is not read (set 21 to log it)
+# A), CS on IO38 (TOT, 10k pull-up). ArduPlane: ARSPD_TYPE 21 and
+# ARSPD_ELVH_RNG 3 (L02D) by default; another part needs only
+# ARSPD_ELVH_RNG. Other vehicles: ARSPD_TYPE 0, the sensor is not read (set
+# 21 to log it)
 define HAL_AIRSPEED_TYPE_DEFAULT (APM_BUILD_TYPE(APM_BUILD_ArduPlane) ? 21 : 0)
 define HAL_AIRSPEED_ELVH_RNG_DEFAULT 3
 
 # Serial ports. The HAL maps the entries as
-#   [0] -> SERIAL0, [1] -> SERIAL3, [2] -> SERIAL2; SERIAL1 is Wi-Fi
+#   [0] -> SERIAL0, [1] -> SERIAL3, [2] -> SERIAL2, [3] -> SERIAL4;
+#   SERIAL1 is Wi-Fi.
+# RX and TX can be swapped at run time with bit 3 of SERIALn_OPTIONS.
 #            PORT             RXPIN        TXPIN
 ESP32_SERIAL USB_SERIAL_JTAG  GPIO_NUM_NC  GPIO_NUM_NC
-# on the V1.2 board the connectors are not on the schematic pins: S1 is IO8/IO9
-# and S2 IO10/IO11, found by joining R and T on each connector. The pin marked
-# R is IO8 and IO10, measured by grounding it, and is the board RX: a u-blox TX
-# on R of S1 is received on IO8. R goes to the TX of the device
-ESP32_SERIAL UART_NUM_1       GPIO_NUM_8   GPIO_NUM_9
+# GPS serial: rxgps (IO3) from the receiver TXD, txgps (IO4) to its RXD
+ESP32_SERIAL UART_NUM_1       GPIO_NUM_3   GPIO_NUM_4
+# connectors S2 and S1: IO10/IO11 and IO8/IO9 as measured on the V1.2 (IO12/13
+# and IO10/11 in the schematic). The pin marked R (IO10, IO8) is the board RX:
+# it goes to the TX of the device. S1 is SERIAL4 (it was SERIAL3 on the V1.2)
 ESP32_SERIAL UART_NUM_2       GPIO_NUM_10  GPIO_NUM_11
+ESP32_SERIAL UART_NUM_3       GPIO_NUM_8   GPIO_NUM_9
 
 # time per loop for the GCS. The board runs a 200 Hz loop (SCHED_LOOP_RATE in
 # defaults.parm), 5 ms per loop: the budget must fit in what the fast tasks
@@ -106,30 +144,30 @@ define HAL_ESP32_WIFI 2
 define WIFI_SSID "ardupilot-s31"
 define WIFI_PWD "ardupilot1"
 
-# no CAN: on the V1.2 board TXD and RXD of the MCP2542FD reach no readable GPIO
+# CAN: TWAI controller on the MCP2542FD transceiver (DroneCAN)
+#         TXPIN        RXPIN
+ESP32_CAN GPIO_NUM_57  GPIO_NUM_56
 
-# PWM outputs SERVO1-8 on IO42-IO49 (MCPWM): pairs 1-2, 3-4, 5-6, 7-8 share
-# one timer, so one frequency
+# PWM outputs SERVO1-8 (MCPWM): pairs 1-2, 3-4, 5-6, 7-8 share one timer, so
+# one frequency
 ESP32_RCOUT GPIO_NUM_42
 ESP32_RCOUT GPIO_NUM_43
 ESP32_RCOUT GPIO_NUM_44
 ESP32_RCOUT GPIO_NUM_45
 ESP32_RCOUT GPIO_NUM_46
 ESP32_RCOUT GPIO_NUM_47
-ESP32_RCOUT GPIO_NUM_48
-ESP32_RCOUT GPIO_NUM_49
+ESP32_RCOUT GPIO_NUM_54
+ESP32_RCOUT GPIO_NUM_55
 
 # no RC input pin: RC comes from a serial protocol (CRSF/ELRS/SBUS on
-# SERIAL2/3)
+# SERIAL2/3/4) or DroneCAN
 
-# status LEDs, active high: LED1 start-up, LED2 GPS fix and position. The V1.2
-# board has them on IO13 and IO12, not on IO14 and IO15 as in the schematic
+# status LEDs, active high: LED1 start-up, LED2 GPS fix and position, on IO13
+# and IO12 as measured on the V1.2 (IO14 and IO15 in the schematic). LED3 is
+# not driven
 define AP_NOTIFY_GPIO_LED_INIT_GPS_ENABLED 1
 define HAL_GPIO_A_LED_PIN 13
 define HAL_GPIO_B_LED_PIN 12
 define HAL_GPIO_LED_ON 1
 
-# no SD card: no logging
-define HAL_LOGGING_ENABLED 0
-define AP_FILESYSTEM_ESP32_ENABLED 0
 define AP_SCRIPTING_ENABLED 0

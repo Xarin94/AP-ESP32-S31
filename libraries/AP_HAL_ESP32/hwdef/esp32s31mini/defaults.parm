@@ -1,12 +1,19 @@
-# MINI AHRS board (ESP32-S31)
+# MINI AHRS board V1.5 (ESP32-S31)
 # 200 Hz main loop (the loop reaches about 300 Hz): PLANE_GCS_SEND_TIME_US in
 # hwdef.dat is sized for it
 SCHED_LOOP_RATE 200
-# u-blox on connector S1 at 460800: with GPS_AUTO_CONFIG 1 the driver only
-# accepts it at 230400, so the module must already send UBX on its own
+# u-blox on the GPS serial (IO3/IO4, SERIAL3) at 460800: with
+# GPS_AUTO_CONFIG 1 the driver only accepts it at 230400, so the module must
+# already send UBX on its own
 SERIAL3_PROTOCOL 5
 SERIAL3_BAUD 460
 GPS_AUTO_CONFIG 0
+# DroneCAN on for CAN nodes; servos are PWM on SERVO1-8 by default (a
+# DroneCAN servo or ESC is added with CAN_D1_UC_SRV_BM / CAN_D1_UC_ESC_BM)
+CAN_P1_DRIVER 1
+CAN_P1_BITRATE 1000000
+CAN_D1_PROTOCOL 1
+CAN_D1_UC_SRV_BM 0
 # EKF3: random walk of the SCH16T-K10 offsets, from the datasheet drift
 # (README.md, "Rumori EKF3"); the white noise and compass terms keep the
 # EKF3 defaults
