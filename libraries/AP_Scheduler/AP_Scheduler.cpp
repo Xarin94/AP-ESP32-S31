@@ -481,6 +481,28 @@ void AP_Scheduler::Log_Write_Performance()
 }
 #endif  // HAL_LOGGING_ENABLED
 
+// the tasks are run, and indexed, in the order of run(): the vehicle and
+// common lists merged by priority, the vehicle task first on a tie
+const char *AP_Scheduler::task_name(int16_t index) const
+{
+    uint8_t vehicle_tasks_offset = 0;
+    uint8_t common_tasks_offset = 0;
+    for (int16_t i = 0; i < _num_tasks; i++) {
+        bool run_vehicle_task;
+        if (vehicle_tasks_offset < _num_vehicle_tasks &&
+            common_tasks_offset < _num_common_tasks) {
+            run_vehicle_task = _vehicle_tasks[vehicle_tasks_offset].priority <= _common_tasks[common_tasks_offset].priority;
+        } else {
+            run_vehicle_task = vehicle_tasks_offset < _num_vehicle_tasks;
+        }
+        const Task &task = run_vehicle_task ? _vehicle_tasks[vehicle_tasks_offset++] : _common_tasks[common_tasks_offset++];
+        if (i == index) {
+            return task.name;
+        }
+    }
+    return nullptr;
+}
+
 // display task statistics as text buffer for @SYS/tasks.txt
 void AP_Scheduler::task_info(ExpandingString &str)
 {

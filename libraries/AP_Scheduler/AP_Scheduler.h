@@ -194,6 +194,10 @@ public:
 
     void task_info(ExpandingString &str);
 
+    // name of the task run with persistent_data.scheduler_task set to
+    // index, nullptr if there is no such task
+    const char *task_name(int16_t index) const;
+
     static const struct AP_Param::GroupInfo var_info[];
 
     // loop performance monitoring:
