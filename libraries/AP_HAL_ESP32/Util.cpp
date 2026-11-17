@@ -18,6 +18,7 @@
 #include <AP_Math/AP_Math.h>
 
 #include "Util.h"
+#include "LPSupervisor.h"
 
 #include "RCOutput.h"
 
@@ -277,6 +278,11 @@ void Util::thread_info(ExpandingString &str)
 {
     // a header to allow for machine parsers to determine format
     str.printf("ThreadsV1\n");
+
+#if HAL_ESP32_LP_SUPERVISOR
+    // gaps of the HAL threads measured by the LP core
+    LPSupervisor::thread_info(str);
+#endif
 
     //    char buffer[1024];
     //    vTaskGetRunTimeStats(buffer);

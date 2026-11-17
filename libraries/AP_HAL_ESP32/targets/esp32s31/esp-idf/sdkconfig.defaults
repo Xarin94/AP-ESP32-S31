@@ -49,6 +49,17 @@ CONFIG_TWAI_ISR_IN_IRAM=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_320=y
 
 #
+# LP core: supervisor, watchdog and diagnostics of the HP threads
+# (AP_HAL_ESP32/LPSupervisor, HAL_ESP32_LP_SUPERVISOR in hwdef.dat).
+# 40 MHz from the crystal, so its millisecond tick is exact; 8 KB of the
+# 32 KB LP RAM for its program, stack and shared data
+#
+CONFIG_ULP_COPROC_ENABLED=y
+CONFIG_ULP_COPROC_TYPE_LP_CORE=y
+CONFIG_ULP_COPROC_RESERVE_MEM=8192
+CONFIG_RTC_FAST_CLK_SRC_XTAL=y
+
+#
 # ESP-IDF console on the USB Serial/JTAG port (UART0 is not routed on the
 # board): the start-up and HAL messages share SERIAL0 with MAVLink, through
 # the same driver once SERIAL0 is opened.

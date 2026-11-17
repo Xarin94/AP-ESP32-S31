@@ -20,6 +20,7 @@
 
 #include "Scheduler.h"
 #include "Semaphores.h"
+#include "LPSupervisor.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -49,6 +50,9 @@ void IRAM_ATTR DeviceBus::bus_thread(void *arg)
     struct DeviceBus *binfo = (struct DeviceBus *)arg;
 
     while (true) {
+#if HAL_ESP32_LP_SUPERVISOR
+        LPSupervisor::heartbeat(binfo->lp_channel);
+#endif
         uint64_t now = AP_HAL::micros64();
         DeviceBus::callback_info *callback;
 
@@ -120,6 +124,16 @@ AP_HAL::Device::PeriodicHandle DeviceBus::register_periodic_callback(uint32_t pe
         }
 #ifdef BUSDEBUG
         printf("%s:%d Thread Start\n", __PRETTY_FUNCTION__, __LINE__);
+#endif
+#if HAL_ESP32_LP_SUPERVISOR
+        {
+            // short name for the supervisor reports: SPI0, I2C1...
+            char lp_name[5];
+            snprintf(lp_name, sizeof(lp_name), "%s%u",
+                     hal_device->bus_type() == AP_HAL::Device::BUS_TYPE_I2C ? "I2C" : "SPI",
+                     (unsigned)(hal_device->bus_num() % 10));
+            lp_channel = LPSupervisor::add_bus(lp_name);
+        }
 #endif
         xTaskCreatePinnedToCore(DeviceBus::bus_thread, name, Scheduler::DEVICE_SS,
                                 this, thread_priority, &bus_thread_handle, HAL_ESP32_DEVICE_BUS_CPU);

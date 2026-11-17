@@ -73,6 +73,10 @@ public:
     void     register_timer_failsafe(AP_HAL::Proc, uint32_t period_us) override;
     void     reboot(bool hold_in_bootloader) override;
     bool     in_main_thread() const override;
+    // long operations of the main thread: the LP core watchdog allows them
+    void     expect_delay_ms(uint32_t ms) override;
+    bool     in_expected_delay(void) const override;
+    void     heartbeat(Heartbeat id) override;
     // check and set the startup state
     void     set_system_initialized() override;
     bool     is_system_initialized() override;
@@ -168,4 +172,8 @@ private:
     bool _in_io_proc;
     void _run_io();
     Semaphore _io_sem;
+
+    uint32_t expect_delay_start;
+    uint32_t expect_delay_length;
+    uint32_t expect_delay_nesting;
 };

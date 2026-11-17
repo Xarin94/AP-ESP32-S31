@@ -51,6 +51,8 @@ private:
     tskTaskControlBlock* bus_thread_handle;
     bool thread_started;
     AP_HAL::Device *hal_device;
+    // LP core supervisor channel of the bus thread
+    uint8_t lp_channel = UINT8_MAX;
 };
 
 }

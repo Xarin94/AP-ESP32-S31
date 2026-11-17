@@ -19,6 +19,7 @@
 #include "AP_Math/AP_Math.h"
 #include "SdCard.h"
 #include "Profile.h"
+#include "LPSupervisor.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -34,6 +35,13 @@
 using namespace ESP32;
 
 extern const AP_HAL::HAL& hal;
+
+// liveness of the HAL threads for the LP core supervisor
+#if HAL_ESP32_LP_SUPERVISOR
+#define LP_HEARTBEAT(ch) LPSupervisor::heartbeat(LPSV_CH_##ch)
+#else
+#define LP_HEARTBEAT(ch) do {} while (0)
+#endif
 
 bool Scheduler::_initialized = true;
 
@@ -74,6 +82,12 @@ void Scheduler::init()
 #endif
 
     hal.console->printf("%s:%d running with CONFIG_FREERTOS_HZ=%d\n", __PRETTY_FUNCTION__, __LINE__,CONFIG_FREERTOS_HZ);
+
+#if HAL_ESP32_LP_SUPERVISOR
+    // before the threads: the LP core supervises them from their first
+    // heartbeat
+    LPSupervisor::init();
+#endif
 
     // keep main tasks that need speed on CPU 0
     // pin potentially slow stuff to CPU 1, as we have disabled the WDT on that core.
@@ -291,6 +305,60 @@ bool IRAM_ATTR Scheduler::in_main_thread() const
     return _main_task_handle == xTaskGetCurrentTaskHandle();
 }
 
+/*
+  a main thread operation that may take long: nested calls extend the
+  delay, a call with 0 ends one. The LP core watchdog does not reset during
+  an expected delay and restarts its timeout at its end
+ */
+void Scheduler::expect_delay_ms(uint32_t ms)
+{
+    if (!in_main_thread()) {
+        return;
+    }
+    LP_HEARTBEAT(MAIN);
+    if (ms == 0) {
+        if (expect_delay_nesting > 0) {
+            expect_delay_nesting--;
+        }
+        if (expect_delay_nesting == 0) {
+            expect_delay_start = 0;
+        }
+    } else {
+        const uint32_t now = AP_HAL::millis();
+        if (expect_delay_start != 0) {
+            // a delay is running: possibly extend it
+            const uint32_t done = now - expect_delay_start;
+            if (expect_delay_length > done) {
+                ms = MAX(ms, expect_delay_length - done);
+            }
+        }
+        expect_delay_start = now;
+        expect_delay_length = ms;
+        expect_delay_nesting++;
+    }
+#if HAL_ESP32_LP_SUPERVISOR
+    LPSupervisor::expect_delay_ms(expect_delay_start != 0 ? expect_delay_length : 0);
+#endif
+}
+
+bool Scheduler::in_expected_delay(void) const
+{
+    if (!_initialized) {
+        // until setup() is complete we expect delays
+        return true;
+    }
+    return expect_delay_start != 0 && AP_HAL::millis() - expect_delay_start <= expect_delay_length;
+}
+
+void Scheduler::heartbeat(Heartbeat id)
+{
+    switch (id) {
+    case Heartbeat::NAV_FILTER:
+        LP_HEARTBEAT(NAV);
+        break;
+    }
+}
+
 void Scheduler::set_system_initialized()
 {
 #ifdef SCHEDDEBUG
@@ -327,6 +395,7 @@ void IRAM_ATTR Scheduler::_timer_thread(void *arg)
 #endif
     while (true) {
         sched->delay_microseconds(1000);
+        LP_HEARTBEAT(TIMER);
         sched->_run_timers();
         //analog in
 #if AP_HAL_ANALOGIN_ENABLED
@@ -344,6 +413,7 @@ void IRAM_ATTR Scheduler::_rcout_thread(void* arg)
 
     while (true) {
         sched->delay_microseconds(4000);
+        LP_HEARTBEAT(RCOUT);
         // process any pending RC output requests
         hal.rcout->timer_tick();
     }
@@ -392,6 +462,7 @@ void IRAM_ATTR Scheduler::_rcin_thread(void *arg)
     hal.rcin->init();
     while (true) {
         sched->delay_microseconds(1000);
+        LP_HEARTBEAT(RCIN);
         ((RCInput *)hal.rcin)->_timer_tick();
     }
 }
@@ -438,8 +509,13 @@ void IRAM_ATTR Scheduler::_io_thread(void* arg)
     uint32_t last_sd_start_ms = AP_HAL::millis();
     while (true) {
         sched->delay_microseconds(1000);
+        LP_HEARTBEAT(IO);
         // run registered IO processes
         sched->_run_io();
+#if HAL_ESP32_LP_SUPERVISOR
+        // LP supervisor statistics, events and reports
+        LPSupervisor::update();
+#endif
 
         if (!hal.util->get_soft_armed()) {
             // if sdcard hasn't mounted then retry it every 3s in the IO
@@ -468,6 +544,7 @@ void Scheduler::_storage_thread(void* arg)
 #endif
     while (true) {
         sched->delay_microseconds(1000);
+        LP_HEARTBEAT(STORAGE);
         // process any pending storage writes
         hal.storage->_timer_tick();
         //print_profile();
@@ -502,6 +579,7 @@ void IRAM_ATTR Scheduler::_uart_thread(void *arg)
 #endif
     while (true) {
         sched->delay_microseconds(1000);
+        LP_HEARTBEAT(UART);
         for (uint8_t i=0; i<hal.num_serial; i++) {
             hal.serial(i)->_timer_tick();
         }
@@ -566,12 +644,18 @@ void IRAM_ATTR Scheduler::_main_thread(void *arg)
     //initialize WTD for current thread on FASTCPU, all cores will be (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1
     wdt_init( TWDT_TIMEOUT_MS, 1 << FASTCPU ); // 3 sec
 
+#if HAL_ESP32_LP_SUPERVISOR
+    // the main loop is supervised from here: setup() is over
+    LPSupervisor::main_loop_started();
+#endif
+
 
 #ifdef SCHEDDEBUG
     printf("%s:%d initialised\n", __PRETTY_FUNCTION__, __LINE__);
 #endif
     while (true) {
         sched->callbacks->loop();
+        LP_HEARTBEAT(MAIN);
         sched->delay_microseconds(250);
 
         // run stats periodically
