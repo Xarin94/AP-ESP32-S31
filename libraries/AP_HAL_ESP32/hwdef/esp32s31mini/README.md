@@ -1,6 +1,6 @@
 # ArduPilot on the MINI AHRS board (ESP32-S31)
 
-Standard ArduPilot, with EKF3, ported to the ESP32-S31 (ESP-IDF 6.1) for the MINI AHRS V1.5 board, module ESP32-S31-WROOM-1-N16R16V. Up to release 0.0.2 the board was the V1.2: its pinout is in the tag `v0.0.2`.
+Standard ArduPilot, with EKF3, ported to the ESP32-S31 (ESP-IDF 6.1) for the MINI AHRS V1.5 board, module ESP32-S31-WROOM-1-N16R16V. Up to release 0.0.2 the board was the V1.2: its pinout is in the tag `v0.0.2`. The V1.4, with a u-blox DAN-F10N on the board, is `esp32s31mini14`: its [README](../esp32s31mini14/README.md) compares the V1.4 and V1.5 pinouts.
 
 - Board: `esp32s31mini`, hwdef in this directory.
 - Base: ArduPilot master `dc78bc5` (October 2026).
