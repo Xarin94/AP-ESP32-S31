@@ -117,6 +117,14 @@ def pre_build(self):
     lib_vars['ARDUPILOT_LIB'] = self.bldnode.find_or_declare('lib/').abspath()
     lib_vars['ARDUPILOT_BIN'] = self.bldnode.find_or_declare('lib/bin').abspath()
     target = self.env.ESP32_TARGET
+    # ESP-IDF settings of the board: an optional sdkconfig.defaults in its
+    # hwdef directory, applied after the one of the target
+    sdkconfig_defaults = [self.env.AP_HAL_ESP32+"/sdkconfig.defaults"]
+    board_sdkconfig = os.path.join(self.env.SRCROOT, 'libraries/AP_HAL_ESP32/hwdef',
+                                   self.env.BOARD, 'sdkconfig.defaults')
+    if os.path.exists(board_sdkconfig):
+        lib_vars['ARDUPILOT_BOARD_SDKCONFIG'] = board_sdkconfig
+        sdkconfig_defaults.append(board_sdkconfig)
     esp_idf = self.cmake(
             name='esp-idf',
             cmake_vars=lib_vars,
@@ -131,7 +139,7 @@ def pre_build(self):
     # the sdkconfig WILL NOT cause it to be deleted as it's not an input. this
     # is by design so the user can tweak it for testing purposes.
     clean_sdkconfig_task = esp_idf_showinc.create_task("clean_sdkconfig",
-        src=self.srcnode.find_or_declare(self.env.AP_HAL_ESP32+"/sdkconfig.defaults"),
+        src=[self.srcnode.find_or_declare(f) for f in sdkconfig_defaults],
         tgt=self.bldnode.find_or_declare("esp-idf_build/.clean-stamp-sdkconfig"))
 
     esp_idf_showinc.post()
