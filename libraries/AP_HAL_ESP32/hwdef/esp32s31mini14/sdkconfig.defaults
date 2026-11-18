@@ -1,0 +1,17 @@
+# MINI AHRS V1.4: ESP-IDF settings applied after those of the esp32s31 target.
+#
+# The code (.text and .rodata) runs from the 16 MB octal PSRAM of the module
+# (XIP), copied from the flash at start-up, instead of from the QIO flash: a
+# miss of the 16 kB instruction cache is refilled several times faster.
+# Measured with ArduCopter, disarmed, no GPS fix: core 0 at 26% instead of
+# 66% at 200 Hz, and the main loop holds 400 Hz with core 0 at 41%.
+# Flash writes (parameters) no longer stop the cache of both cores.
+# The PSRAM is used only for the code: it is not added to the heap, so the
+# ArduPilot heap and the DMA buffers stay in internal SRAM.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_200M=y
+CONFIG_SPIRAM_BOOT_INIT=y
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+CONFIG_SPIRAM_USE_MEMMAP=y
+CONFIG_SPIRAM_MEMTEST=y

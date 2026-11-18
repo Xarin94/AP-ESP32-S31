@@ -1,0 +1,28 @@
+# MINI AHRS board V1.4 (ESP32-S31), without RM3100, SD card and ELVH
+# 400 Hz main loop: with the code running from the PSRAM (sdkconfig.defaults)
+# core 0 is at about 41% at 400 Hz
+SCHED_LOOP_RATE 400
+# DAN-F10N on SERIAL3 (IO3/IO4): the driver finds its baud rate and
+# configures it (UBX at 230400)
+SERIAL3_PROTOCOL 5
+GPS_AUTO_CONFIG 1
+# GPS + SBAS + Galileo (BeiDou off), 10 Hz; SBAS through GPS1_GNSS_MODE
+# bit 1 (GPS_SBAS_MODE only acts on the legacy u-blox configuration)
+GPS1_GNSS_MODE 7
+GPS1_RATE_MS 100
+GPS_SBAS_MODE 1
+# use the GPS L5 signals, still flagged unhealthy (pre-operational), by
+# forcing their health state (u-blox: not for safety-critical uses)
+GPS_DRV_OPTIONS 32
+# no compass on the board: EKF3 yaw from the GPS velocity through the GSF
+# yaw estimator, aligned only after moving with a GPS fix
+COMPASS_ENABLE 0
+EK3_SRC1_YAW 8
+# EKF3: random walk of the SCH16T-K10 offsets, from the datasheet drift
+EK3_GBIAS_P_NSE 0.0001
+EK3_ABIAS_P_NSE 0.0008
+# ArduCopter: tricopter (motors on SERVO1, SERVO2, SERVO4, tail servo on
+# SERVO7)
+FRAME_CLASS 7
+# connector S1 (SERIAL4): serial RC receiver (CRSF/ELRS/SBUS)
+SERIAL4_PROTOCOL 23
