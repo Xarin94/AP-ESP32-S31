@@ -6,7 +6,7 @@ Both boards carry the ESP32-S31-WROOM-1-N16R16V module (16 MB flash, 16 MB octal
 |---|---|---|
 | V1.2 | `esp32s31mini` up to tag `v0.0.2` | one SPI bus for every sensor, no PWM on the schematic pins |
 | V1.4 | `esp32s31mini14` (this directory) | u-blox DAN-F10N GPS on the board, code run from the PSRAM |
-| V1.5 | [`esp32s31mini`](../esp32s31mini/README.md) | SD memory, CAN, RM3100 chip select on IO2 |
+| V1.5 | [`esp32s31mini`](../esp32s31mini/README.md) | SD memory, RM3100 chip select on IO2 |
 
 ## Module pads 42-53
 
@@ -17,7 +17,7 @@ On the V1.2 the module pads 42-53 were found not to be on the GPIO named by the 
 | 44 / 45 | IO10 / IO11 | UART1 RX / TX (connector S1, U4) | IO8 / IO9 (measured) |
 | 46 / 47 | IO12 / IO13 | UART2 RX / TX (connector S2, U7) | IO10 / IO11 (measured) |
 | 48 / 49 | IO14 / IO15 | LED1 / LED2 | IO13 / IO12 (measured) |
-| 42 / 43 | IO8 / IO9 | CANRX / CANTX on the V1.4 | none found: CAN not configured on the V1.4 |
+| 42 / 43 | IO8 / IO9 | CANRX / CANTX on the V1.4 schematic | none: the V1.4 CAN is on IO56 / IO57, as on the V1.5 |
 | 52 | IO18 | `CSmag` on the V1.4 | unknown: on the V1.2 this pad is not IO18 |
 
 ## Pinout
@@ -39,7 +39,7 @@ On the V1.2 the module pads 42-53 were found not to be on the GPIO named by the 
 | UART1 RX / TX (connector S1) | `UART1RX` / `UART1TX` | 8 / 9 | 8 / 9 |
 | UART2 RX / TX (connector S2) | `UART2RX` / `UART2TX` | 10 / 11 | 10 / 11 |
 | USB D- / D+ | `D-` / `D+` | 33 / 34 | 33 / 34 |
-| CAN TX / RX (MCP2542FD) | `CANTX` / `CANRX` | pads 43 / 42, not reachable | 57 / 56 |
+| CAN TX / RX (MCP2542FD) | `CANTX` / `CANRX` | 57 / 56 | 57 / 56 |
 | SERVO1-6 | `s1`-`s6` | 42-47 | 42-47 |
 | SERVO7 / SERVO8 | `s7` / `s8` | 48 / 49 | 54 / 55 |
 | LED1 / LED2 | `led1` / `led2` | 13 / 12 | 13 / 12 |
@@ -61,12 +61,15 @@ Common to both boards:
 | SERIAL4 | UART1, connector S1 | serial RC (`SERIAL4_PROTOCOL 23`) |
 | IMU | SCH16T on SPI bus 1 | `ROTATION_ROLL_180` |
 | Baros | 2x BMP581 on SPI bus 2 | |
+| CAN1 | TWAI on the MCP2542FD (TX IO57, RX IO56) | DroneCAN, 1 Mbit/s |
 
-The hwdef is for a V1.4 without RM3100, SD card and ELVH mounted: none of them is configured, and there is no log. CAN is not configured. IO2 is listed as an SPI chip select that no driver opens, so the HAL drives it high at boot and keeps the GPS out of reset.
+The hwdef is for a V1.4 without RM3100, SD card and ELVH mounted: none of them is configured, and there is no log. IO2 is listed as an SPI chip select that no driver opens, so the HAL drives it high at boot and keeps the GPS out of reset.
 
 `defaults.parm` sets the board up for an ArduCopter tricopter: `FRAME_CLASS 7` (motors on SERVO1, SERVO2 and SERVO4, tail servo on SERVO7), a 400 Hz main loop, and EKF3 yaw from the GSF (`EK3_SRC1_YAW 8`, `COMPASS_ENABLE 0`), since there is no compass. Without a compass the yaw aligns only after moving with a GPS fix, so the first take-off must be in a mode that does not need a position.
 
-Checked on the V1.4 with ArduCopter, at rest and indoors: SCH16T (about -1000 mG on Z at rest, so the K10 variant is right), both BMP581, the DAN-F10N on SERIAL3 in both directions at 10 Hz, the 400 Hz main loop. Not checked yet: the PWM signals, connectors S1 and S2, the LEDs, a GPS fix and flight.
+CAN: DroneCAN on CAN1 at 1 Mbit/s (`CAN_P1_DRIVER 1`, `CAN_D1_PROTOCOL 1`); the servos stay on PWM. SLCAN works as on the STM32 boards with one USB port: with `CAN_SLCAN_CPORT 1` (read at boot) and `CAN_SLCAN_SERNUM 0` the USB (SERIAL0) becomes an SLCAN adapter on CAN1 until `CAN_SLCAN_TIMOUT` or a reboot, and Mission Planner sets this by itself. The S31 cannot add a second USB CDC for a dedicated SLCAN port: the USB connector (IO33/IO34) is the USB Serial/JTAG, which has one fixed CDC, and the USB OTG of the S31 has only the HS (UTMI) PHY, on other pads. Over MAVLink (USB or Wi-Fi) the CAN bus is also reachable with `MAV_CMD_CAN_FORWARD` ("MAVLink-CAN" in Mission Planner, `mavcan:` in the DroneCAN GUI tool).
+
+Checked on the V1.4 with ArduCopter, at rest and indoors: SCH16T (about -1000 mG on Z at rest, so the K10 variant is right), both BMP581, the DAN-F10N on SERIAL3 in both directions at 10 Hz, the 400 Hz main loop. Not checked yet: CAN, the PWM signals, connectors S1 and S2, the LEDs, a GPS fix and flight.
 
 ## DAN-F10N on the V1.4
 

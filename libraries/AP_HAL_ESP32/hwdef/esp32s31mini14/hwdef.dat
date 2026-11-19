@@ -8,8 +8,8 @@
 # LEDs stay on the GPIOs measured on the V1.2, as on the V1.5.
 #
 # This build is for a V1.4 without RM3100, SD card and ELVH: their parts are
-# not mounted and their chip selects are not driven. CAN is not configured:
-# its pads (42/43) are among those not on their schematic GPIO.
+# not mounted and their chip selects are not driven. CAN on the MCP2542FD,
+# TX IO57 / RX IO56 as on the V1.5.
 #
 # Module pins not available (datasheet S31): GPIO26-28/30-32 flash,
 # GPIO29/41 not bonded, GPIO33/34 USB Serial/JTAG. Strapping pins: GPIO36/37
@@ -100,6 +100,16 @@ define HAL_ESP32_USB_NO_CHIP_RESET 1
 define HAL_ESP32_WIFI 2
 define WIFI_SSID "ardupilot-s31"
 define WIFI_PWD "ardupilot1"
+
+# CAN: TWAI controller on the MCP2542FD transceiver (DroneCAN), same pins
+# as on the V1.5
+#         TXPIN        RXPIN
+ESP32_CAN GPIO_NUM_57  GPIO_NUM_56
+# SLCAN on demand, as on the STM32 boards with one USB port: with
+# CAN_SLCAN_CPORT 1 (at boot) and CAN_SLCAN_SERNUM 0 the USB (SERIAL0) turns
+# into an SLCAN adapter on CAN1 until CAN_SLCAN_TIMOUT or a reboot. The S31
+# has no second USB CDC: the USB connector is the USB Serial/JTAG
+define AP_CAN_SLCAN_ENABLED 1
 
 # PWM outputs SERVO1-8 (MCPWM) on s1-s8: pairs 1-2, 3-4, 5-6, 7-8 share one
 # timer, so one frequency
