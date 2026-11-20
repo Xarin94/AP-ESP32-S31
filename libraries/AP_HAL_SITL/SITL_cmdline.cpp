@@ -17,6 +17,7 @@
 #include <SITL/SIM_SingleCopter.h>
 #include <SITL/SIM_Plane.h>
 #include <SITL/SIM_Glider.h>
+#include <SITL/SIM_Y3Heavy.h>
 #include <SITL/SIM_QuadPlane.h>
 #include <SITL/SIM_Rover.h>
 #include <SITL/SIM_BalanceBot.h>
@@ -153,6 +154,9 @@ static const struct {
     { "hexadeca-octa",      MultiCopter::create },
     { "hexadeca-octa-cwx",  MultiCopter::create },
     { "tri",                MultiCopter::create },
+#if AP_SIM_Y3HEAVY_ENABLED
+    { "y3heavy",            Y3Heavy::create },
+#endif
     { "y6",                 MultiCopter::create },
     { "deca",               MultiCopter::create },
     { "deca-cwx",           MultiCopter::create },
