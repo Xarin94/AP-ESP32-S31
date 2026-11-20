@@ -39,6 +39,7 @@
 
 #include "SIM_StratoBlimp.h"
 #include "SIM_Glider.h"
+#include "SIM_Y3Heavy.h"
 #include "SIM_FlightAxis.h"
 #include "SIM_Frame.h"
 
@@ -1628,6 +1629,12 @@ const AP_Param::GroupInfo SIM::ModelParm::var_info[] = {
     // @Group: FRM_
     // @Path: ./SIM_Frame.cpp
     AP_SUBGROUPPTR(simframe_ptr, "FRM_", 8, SIM::ModelParm, Frame),
+
+#if AP_SIM_Y3HEAVY_ENABLED
+    // @Group: Y3_
+    // @Path: ./SIM_Y3Heavy.cpp
+    AP_SUBGROUPPTR(y3heavy_ptr, "Y3_", 9, SIM::ModelParm, Y3Heavy),
+#endif
 
     AP_GROUPEND
 };

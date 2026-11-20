@@ -55,6 +55,7 @@ struct float_array {
 
 class StratoBlimp;
 class Glider;
+class Y3Heavy;
 class FlightAxis;
 
 struct sitl_fdm {
@@ -408,6 +409,9 @@ public:
 #endif
 #if AP_SIM_GLIDER_ENABLED
         Glider *glider_ptr;
+#endif
+#if AP_SIM_Y3HEAVY_ENABLED
+        Y3Heavy *y3heavy_ptr;
 #endif
         // multicopter/quadplane VTOL frame model
         class Frame *simframe_ptr;
