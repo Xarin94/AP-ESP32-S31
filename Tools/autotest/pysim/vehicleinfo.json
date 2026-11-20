@@ -144,6 +144,13 @@
                     "default_params/copter-tri.parm"
                 ]
             },
+            "y3heavy": {
+                "waf_target": "bin/arducopter",
+                "default_params_filename": [
+                    "default_params/copter.parm",
+                    "default_params/copter-y3heavy.parm"
+                ]
+            },
             "y6": {
                 "waf_target": "bin/arducopter",
                 "default_params_filename": [
