@@ -154,6 +154,11 @@ void AP_MotorsTri::output_armed_stabilizing()
     // sanity check YAW_SV_ANGLE parameter value to avoid divide by zero
     _yaw_servo_angle_max_deg.set(constrain_float(_yaw_servo_angle_max_deg, AP_MOTORS_TRI_SERVO_RANGE_DEG_MIN, AP_MOTORS_TRI_SERVO_RANGE_DEG_MAX));
 
+    if (split_mix()) {
+        output_armed_stabilizing_split();
+        return;
+    }
+
     // apply voltage and air pressure compensation
     const float compensation_gain = thr_lin.get_compensation_gain();
     roll_thrust = (_roll_in + _roll_in_ff) * compensation_gain;
@@ -276,6 +281,132 @@ void AP_MotorsTri::output_armed_stabilizing()
     _thrust_right = constrain_float(_thrust_right, 0.0f, 1.0f);
     _thrust_left = constrain_float(_thrust_left, 0.0f, 1.0f);
     _thrust_rear = constrain_float(_thrust_rear, 0.0f, 1.0f);
+}
+
+/*
+  split mixer, for frames whose front pair carries most of the weight:
+  - front pair: throttle and roll
+  - rear motor: a feed-forward that balances the front pair about the
+    CG, plus the whole pitch demand
+  - tail servo: yaw, scaled so the yaw moment does not change with the
+    thrust the rear motor carries for pitch
+ */
+void AP_MotorsTri::output_armed_stabilizing_split()
+{
+    // apply voltage and air pressure compensation
+    const float compensation_gain = thr_lin.get_compensation_gain();
+    const float roll_thrust = (_roll_in + _roll_in_ff) * compensation_gain;
+    float pitch_thrust = (_pitch_in + _pitch_in_ff) * compensation_gain;
+    const float yaw_thrust = (_yaw_in + _yaw_in_ff) * compensation_gain;
+    float throttle_thrust = get_throttle() * compensation_gain;
+    float throttle_avg_max = _throttle_avg_max * compensation_gain;
+
+    if (_pitch_reversed) {
+        pitch_thrust *= -1.0f;
+    }
+
+    if (throttle_thrust <= 0.0f) {
+        throttle_thrust = 0.0f;
+        limit.throttle_lower = true;
+    }
+    if (throttle_thrust >= _throttle_thrust_max) {
+        throttle_thrust = _throttle_thrust_max;
+        limit.throttle_upper = true;
+    }
+    throttle_avg_max = constrain_float(throttle_avg_max, throttle_thrust, _throttle_thrust_max);
+
+    // front pair: roll has priority over throttle. The throttle that
+    // leaves the most room for roll is 0.5, but never above
+    // throttle_avg_max, so roll corrections do not make the vehicle climb
+    const float roll_half = 0.5f * roll_thrust;
+    const float roll_room = fabsf(roll_half);
+    const float throttle_best = MIN(0.5f, throttle_avg_max);
+    float roll_scale = 1.0f;
+    if (!is_zero(roll_room)) {
+        roll_scale = constrain_float(throttle_best / roll_room, 0.0f, 1.0f);
+    }
+
+    float thr_adj = throttle_thrust - throttle_best;
+    if (roll_scale < 1.0f) {
+        // the whole range of the front pair is used by roll
+        limit.roll = true;
+        if (thr_adj > 0.0f) {
+            limit.throttle_upper = true;
+        }
+        thr_adj = 0.0f;
+    } else if (thr_adj < roll_room - throttle_best) {
+        // throttle can't go lower without losing roll
+        thr_adj = roll_room - throttle_best;
+    } else if (thr_adj > 1.0f - (throttle_best + roll_room)) {
+        // throttle can't go higher without losing roll
+        thr_adj = 1.0f - (throttle_best + roll_room);
+        limit.throttle_upper = true;
+    }
+
+    const float throttle_front = throttle_best + thr_adj;
+    // compensation_gain can never be zero
+    _throttle_out = throttle_front / compensation_gain;
+
+    _thrust_right = throttle_front - roll_scale * roll_half;
+    _thrust_left = throttle_front + roll_scale * roll_half;
+
+    // rear motor: with the payload on the front axis the rear carries the
+    // same thrust whatever the payload, so in flight the feed-forward is
+    // the hover rear thrust. It ramps in with the front throttle only
+    // below half the hover throttle, so on the ground the rear never
+    // lifts the tail before the front pair lifts the vehicle.
+    // MOT_THST_HOVER lags payload changes by seconds: scaling by
+    // throttle / hover throttle instead pitched the vehicle 24 deg in
+    // SITL when 6 kg were added at once. Nose up needs less rear thrust
+    const float rear_hover = constrain_float(_tri_rear_hover, 0.02f, 0.9f);
+    const float ramp_throttle = AP_MOTORS_TRI_SPLIT_FF_RAMP * get_throttle_hover() * compensation_gain;
+    const float rear_ff = rear_hover * compensation_gain * constrain_float(throttle_front / ramp_throttle, 0.0f, 1.0f);
+    float rear_vertical = rear_ff - pitch_thrust;
+    if (rear_vertical < 0.0f) {
+        rear_vertical = 0.0f;
+        limit.pitch = true;
+    } else if (rear_vertical > 1.0f) {
+        rear_vertical = 1.0f;
+        limit.pitch = true;
+    }
+
+    // tail servo: the side force is tan(pivot) times the rear vertical
+    // thrust. Pitch moves the rear thrust a lot, so the pivot angle is
+    // scaled by it to keep the yaw moment set by yaw_thrust alone. Full
+    // yaw_thrust gives full deflection at the hover rear thrust
+    if (!_have_tail_servo) {
+        _pivot_angle = 0.0f;
+    } else {
+        const float angle_max = radians(_yaw_servo_angle_max_deg);
+        const float side_thrust = yaw_thrust * tanf(angle_max) * rear_hover;
+        _pivot_angle = atan2f(side_thrust, MAX(rear_vertical, 0.01f));
+
+        // pitch has priority over yaw: tilt only as far as the rear
+        // motor can still hold rear_vertical (rear_vertical / cos <= 1)
+        float pivot_max = angle_max;
+        if (rear_vertical > cosf(angle_max)) {
+            pivot_max = acosf(MIN(rear_vertical, 1.0f));
+        }
+        if (fabsf(_pivot_angle) > pivot_max) {
+            limit.yaw = true;
+            _pivot_angle = constrain_float(_pivot_angle, -pivot_max, pivot_max);
+        }
+    }
+
+    // pivot_max keeps the angle below 90 deg, so cos is never zero
+    _thrust_rear = rear_vertical / cosf(_pivot_angle);
+
+    _thrust_right = constrain_float(_thrust_right, 0.0f, 1.0f);
+    _thrust_left = constrain_float(_thrust_left, 0.0f, 1.0f);
+    _thrust_rear = constrain_float(_thrust_rear, 0.0f, 1.0f);
+}
+
+const char* AP_MotorsTri::get_type_string() const
+{
+    if (split_mix()) {
+        return _pitch_reversed ? "split pitch-reversed" : "split";
+    }
+    return _pitch_reversed ? "pitch-reversed" : "";
 }
 
 // output_test_seq - spin a motor at the pwm value specified

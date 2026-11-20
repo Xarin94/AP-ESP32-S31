@@ -258,6 +258,23 @@ const AP_Param::GroupInfo AP_MotorsMulticopter::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("IDLE_SEC", 45, AP_MotorsMulticopter, _idle_time_delay_s, 0),
 
+    // indexes 60 and up are kept for this fork, clear of upstream additions
+
+    // @Param{Copter}: TRI_MIX
+    // @DisplayName: Tricopter mixer
+    // @Description: Tricopter mixer. Standard: throttle on all three motors, pitch on the front pair against the rear motor. Split: throttle and roll on the front pair only, pitch on the rear motor only, yaw on the tail servo; for frames whose front motors carry most of the weight
+    // @Values: 0:Standard,1:Split (pitch on rear motor only)
+    // @User: Advanced
+    AP_GROUPINFO_FRAME("TRI_MIX", 60, AP_MotorsMulticopter, _tri_mix, 0, AP_PARAM_FRAME_TRICOPTER),
+
+    // @Param{Copter}: TRI_RHOV
+    // @DisplayName: Tricopter rear motor hover thrust
+    // @Description: Split mixer only (MOT_TRI_MIX 1). Rear motor thrust, on the same 0 to 1 scale as MOT_THST_HOVER, that balances the front pair about the CG in hover with the payload on the front axis. In flight the rear motor runs this value plus the pitch demand; on the ground it ramps in with the front throttle, reaching it at half MOT_THST_HOVER. It also sets the yaw scaling: full yaw demand gives full tail deflection at this thrust. Read it from the rear motor output in a steady hover; set it no higher than that, or the rear can lift the tail before the vehicle leaves the ground
+    // @Range: 0.02 0.9
+    // @Increment: 0.01
+    // @User: Advanced
+    AP_GROUPINFO_FRAME("TRI_RHOV", 61, AP_MotorsMulticopter, _tri_rear_hover, 0.2, AP_PARAM_FRAME_TRICOPTER),
+
     AP_GROUPEND
 };
 

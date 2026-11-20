@@ -16,6 +16,10 @@
 #define AP_MOTORS_TRI_SERVO_RANGE_DEG_MIN   5   // minimum angle movement of tail servo in degrees
 #define AP_MOTORS_TRI_SERVO_RANGE_DEG_MAX   80  // maximum angle movement of tail servo in degrees
 
+// split mixer: the rear motor feed-forward reaches MOT_TRI_RHOV at this
+// fraction of the hover throttle
+#define AP_MOTORS_TRI_SPLIT_FF_RAMP         0.5f
+
 /// @class      AP_MotorsTri
 class AP_MotorsTri : public AP_MotorsMulticopter {
 public:
@@ -69,7 +73,11 @@ protected:
     void                thrust_compensation(void) override;
 
     const char* _get_frame_string() const override { return "TRI"; }
-    const char*  get_type_string() const override { return _pitch_reversed ? "pitch-reversed" : ""; }
+    const char*  get_type_string() const override;
+
+    // split mixer: front pair throttle and roll, rear motor pitch, tail servo yaw
+    void                output_armed_stabilizing_split();
+    bool                split_mix() const { return _tri_mix == 1; }
 
     // output_test_seq - spin a motor at the pwm value specified
     //  motor_seq is the motor's sequence number from 1 to the number of motors on the frame
