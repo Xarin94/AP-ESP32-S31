@@ -56,7 +56,7 @@ try:
     m.mav.request_data_stream_send(m.target_system, m.target_component,
                                    mavutil.mavlink.MAV_DATA_STREAM_ALL, 10, 1)
 
-    state = {'t': 0, 'alt': 0.0, 'armed': False, 'mode': ''}
+    state = {'t': 0, 'alt': 0.0, 'armed': False, 'mode': '', 'gps': False}
 
     def pump(timeout=0.05):
         msg = m.recv_match(blocking=True, timeout=timeout)
@@ -74,6 +74,8 @@ try:
                 state['mode'] = mavutil.mode_string_v10(msg)
             elif t == 'STATUSTEXT':
                 log('  AP: %s' % msg.text)
+                if 'is using GPS' in msg.text:
+                    state['gps'] = True
             msg = m.recv_match(blocking=False)
 
     def sim_sleep(sec, rc=None):
@@ -95,7 +97,22 @@ try:
     def set_param(name, value):
         m.mav.param_set_send(m.target_system, m.target_component, name.encode(), float(value),
                              mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
-        sim_sleep(0.2)
+        # the autopilot echoes a set parameter; no echo = no such parameter
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            msg = m.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.5)
+            if msg is not None and msg.param_id == name:
+                return
+        raise RuntimeError('parameter %s not set: no such parameter?' % name)
+
+    def get_param(name):
+        m.mav.param_request_read_send(m.target_system, m.target_component, name.encode(), -1)
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            msg = m.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.5)
+            if msg is not None and msg.param_id == name:
+                return msg.param_value
+        return float('nan')
 
     def set_mode(mode):
         m.set_mode(mode)
@@ -105,7 +122,8 @@ try:
         t0 = state['t']
         sim_sleep(sec, rc)
         phases.append((name, t0, state['t']))
-        log('phase %-22s %6.1f s  alt %.1f' % (name, (state['t'] - t0) / 1000, state['alt']))
+        log('phase %-22s %6.1f s  alt %.1f  MOT_TRI_RHOV %.3f' % (name, (state['t'] - t0) / 1000, state['alt'],
+                                                                get_param('MOT_TRI_RHOV')))
 
     def goto(north_m, east_m, alt):
         import math
@@ -127,6 +145,7 @@ try:
 
     set_param('SIM_Y3_PAYLOAD', initial_payload)
     log('waiting for EKF and GPS')
+    wait(lambda: state['gps'], 120, 'EKF using GPS')
     set_mode('GUIDED')
     armed = False
     for _ in range(60):
@@ -193,7 +212,7 @@ try:
         set_param('SIM_Y3_PAYLOAD', 0)
         phase('payload dropped', 10)
 
-    set_param('WPNAV_SPEED', 1000)
+    set_param('WP_SPD', 10)
     goto(150, 0, 10)
     phase('fast north 10 m/s', 25)
     goto(0, 0, 10)

@@ -5,8 +5,10 @@
 
 FRAME_CLASS     7
 MOT_TRI_MIX     1
-# rear thrust in hover, same scale as MOT_THST_HOVER
-MOT_TRI_RHOV    0.21
+# rear thrust in hover, same scale as MOT_THST_HOVER. The model needs
+# 0.212: start about 30% low and let MOT_TRI_RH_LEARN find it in hover
+MOT_TRI_RHOV    0.15
+MOT_TRI_RH_LEARN 2
 
 # tail servo
 MOT_YAW_SV_ANGLE 60
@@ -32,19 +34,26 @@ MOT_BAT_VOLT_MAX 0
 SIM_BATT_VOLTAGE 50.4
 BATT_CAPACITY   16000
 
-# first rate gains, from the model's control authority and rotor time
-# constants: roll on the slow front pair, pitch on the fast rear motor
-ATC_RAT_RLL_P   0.035
-ATC_RAT_RLL_I   0.035
-ATC_RAT_RLL_D   0.003
-ATC_RAT_PIT_P   0.18
-ATC_RAT_PIT_I   0.18
-ATC_RAT_PIT_D   0.006
-ATC_RAT_YAW_P   0.25
-ATC_RAT_YAW_I   0.025
+# rate and angle gains from y3heavy_pid_design.py (rear 10% of the
+# weight, X6 lag 0.07 s, rear 0.035 s, servo 0.025 s): phase margin 50 deg
+# nominal, at least 38 deg with actuators twice as slow.
+# Tools/autotest/y3heavy/ has the 15% and the first-flight sets
+ATC_RAT_RLL_P   0.142
+ATC_RAT_RLL_I   0.142
+ATC_RAT_RLL_D   0.0057
+ATC_RAT_PIT_P   0.551
+ATC_RAT_PIT_I   0.551
+ATC_RAT_PIT_D   0.0152
+ATC_RAT_YAW_P   0.79
+ATC_RAT_YAW_I   0.079
+ATC_RAT_YAW_D   0
 ATC_RAT_YAW_FLTE 5.0
-ATC_ANG_RLL_P   3.0
-# nose down authority is what the rear motor drops from hover to idle
-ATC_ACCEL_R_MAX 40000
-ATC_ACCEL_P_MAX 30000
-ATC_ACCEL_Y_MAX 18000
+ATC_ANG_RLL_P   6.5
+ATC_ANG_PIT_P   9
+ATC_ANG_YAW_P   3
+# acceleration limits, deg/s/s. Pitch: about half the nose down authority
+# with 6 kg (the rear motor can only drop from hover to idle); yaw: about
+# a third of the maximum
+ATC_ACC_R_MAX 600
+ATC_ACC_P_MAX 200
+ATC_ACC_Y_MAX 200

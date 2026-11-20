@@ -18,7 +18,8 @@ tilt   = atan(yaw * tan(SV_ANGLE) * RHOV / V)
 rear   = V / cos(tilt)
 ```
 
-- `MOT_TRI_RHOV`: rear thrust in hover, on the `MOT_THST_HOVER` scale. With the payload on the front axis the rear needs the same thrust whatever the payload, so in flight the feed-forward is just `RHOV`. `ramp` brings it in with the front throttle up to half `MOT_THST_HOVER`, so on the ground the rear never lifts the tail first. Read it from the rear output in a steady hover; never set it higher than that.
+- `MOT_TRI_RHOV`: rear thrust in hover, on the `MOT_THST_HOVER` scale. With the payload on the front axis the rear needs the same thrust whatever the payload, so in flight the feed-forward is just `RHOV`. `ramp` brings it in with the front throttle up to half `MOT_THST_HOVER`, so on the ground the rear never lifts the tail first. Start it low rather than high (default 0.15).
+- `MOT_TRI_RH_LEARN` (default 2, learn and save): in a steady level hover, in the modes and conditions where `MOT_HOVER_LEARN` works (not STABILIZE or ACRO), the pitch output is what `RHOV` misses, and `RHOV` takes it over with a 5 s time constant; saved on disarm.
 - Yaw is scaled by `RHOV / V`: the side force, and so the yaw moment, does not change with the thrust the rear carries for pitch.
 - Priorities: on the front pair roll before throttle; on the rear pitch before yaw (the tilt is cut so `rear <= 1`). The `limit` flags are set, so the integrators stop at saturation.
 - `MOT_TRI_MIX 0` (default) is the standard tricopter mixer, unchanged.
@@ -35,10 +36,11 @@ A first feed-forward scaled the rear by `throttle / MOT_THST_HOVER`. It pitched 
 | X6 thrust, torque | 3.35e-4 w^2 N, 9.78e-6 w^2 Nm (w in rad/s) | fitted on the table, spread < 2.5% |
 | X6 ESC | speed held (12S and 14S tables match), fixed 1050-1950 us | Hobbywing |
 | X6 unit mass | 0.748 kg with prop and cables | Hobbywing |
-| X6 speed lag | 0.10 s (`SIM_Y3_FTAU`) | **estimate**, not published |
+| X6 speed lag | 0.07 s (`SIM_Y3_FTAU`) | **estimate**: FOC speed loop, J about 1.5e-3 kg m^2, mechanical constant about 37 ms |
 | Rear prop | CT 0.135, CP 0.088 (`SIM_Y3_R_CT`, `R_CP`) | **estimate** for a 13x10 three blade |
 | Rear full speed | 8000 rpm at full command on 50.4 V (`SIM_Y3_RRPM`) | **placeholder**: set the real limit |
-| Rear lag, servo | 0.04 s, 0.10 s per 60 deg (`SIM_Y3_RTAU`, `SV_T60`) | **estimates** |
+| Rear lag | 0.035 s (`SIM_Y3_RTAU`) | **estimate**: J about 3.5e-4 kg m^2, mechanical constant about 28 ms |
+| Tail servo | 0.025 s small signal, 0.10 s per 60 deg (`SIM_Y3_SV_TAU`, `SV_T60`) | **estimates** |
 | Rear unit mass | 0.45 kg, part of the 3.5 kg (`SIM_Y3_RMASS`) | **estimate** |
 | CG | rear carries 10% with no payload (`SIM_Y3_RSHARE`): 72 mm behind the front axis | from the 90/10 split |
 | Inertia, no payload | Ixx 0.226, Iyy 0.236, Izz 0.455 kg m^2 (4.996 kg) | point masses and boxes |
@@ -54,8 +56,8 @@ Rear rotor at the model's numbers: hover 4.90 N at 3000 rpm (53 W), idle at `MOT
 
 - X6 thrust curve fitted on the Hobbywing table: `MOT_PWM_MIN 1050`, `MOT_PWM_MAX 1950`, `MOT_SPIN_MIN 0.22`, `MOT_SPIN_MAX 0.95`, `MOT_THST_EXPO 0` (linear above spin min).
 - `MOT_BAT_VOLT_MAX 0`: the X6 ESC holds speed, so there is no voltage compensation.
-- `MOT_THST_HOVER` 0.2 empty, about 0.44 with 6 kg. `MOT_TRI_RHOV 0.21`.
-- First rate gains from the model's control authority and lags: roll P/I 0.035 D 0.003, pitch P/I 0.18 D 0.006, yaw P 0.25 I 0.025.
+- `MOT_THST_HOVER` 0.2 empty, about 0.44 with 6 kg. `MOT_TRI_RHOV` starts at 0.15 and is learned (the model needs 0.212).
+- Rate and angle gains from `y3heavy_pid_design.py` (rear 10%): roll P/I 0.142 D 0.0057, pitch P/I 0.551 D 0.0152, yaw P 0.79 I 0.079; angle P 6.5 / 9 / 3; `ATC_ACC_R/P/Y_MAX` 600 / 200 / 200 deg/s/s (in this ArduPilot the old `ATC_ACCEL_*` names do not exist). `y3heavy-first-flight.parm` is the same at 60% for a first hover; `y3heavy-rear15.parm` is the set for 15% on the rear rotor.
 
 The rear ESC must be calibrated to the same 1050-1950 us range as the X6. Limit its top speed in the ESC, not with `SERVOx_MAX`, so the mixer knows when the rear saturates.
 
@@ -71,6 +73,9 @@ $PY ./waf copter
 # interactive, with MAVProxy console and map
 Tools/autotest/sim_vehicle.py -v ArduCopter -f y3heavy -N --console --map
 
+# rate and angle loop gains from the model (RSHARE 0.15: 15% of the weight on the rear)
+Tools/autotest/y3heavy/y3heavy_pid_design.py --rshare 0.10
+
 # scripted test flight and analysis (pymavlink, numpy, matplotlib)
 Tools/autotest/y3heavy/y3heavy_flight.py /tmp/y3run
 Tools/autotest/y3heavy/y3heavy_flight.py /tmp/y3loaded --payload 6
@@ -82,23 +87,26 @@ Configuring for SITL replaces the board configuration: run `./waf configure --bo
 
 ## Results, 2026-11-20
 
-SITL only, model and gains as above. Errors are desired minus actual attitude, maximum over the phase.
+SITL only. Gains from `y3heavy_pid_design.py` for each rear share; the same acceleration limits in both (`ATC_ACC_R/P/Y_MAX` 600 / 200 / 200 deg/s/s). Errors are desired minus actual attitude, maximum of roll and pitch over the phase. Stress: actuator lags x1.5, wind 8 m/s with turbulence 3.
 
-| Test | Result |
-|---|---|
-| Hover, empty | rear at `RHOV`, pitch I about -0.005 |
-| Roll steps 15 deg (ALT_HOLD) | max error 5.1-5.6 deg (lag), about 2 deg overshoot |
-| Pitch steps 15 deg | max error 3.2-4.3 deg (lag), about 2 deg overshoot |
-| Yaw stick step | rate follows with about 0.3 s lag |
-| Takeoff, empty / 6 kg | max pitch error 4.7 / 4.9 deg |
-| 6 kg added at once in hover | max pitch error 2-7.5 deg (24 deg with the throttle-ratio feed-forward) |
-| 6 kg drained in 20 s | max pitch error 0.12 deg |
-| 6 kg dropped at once | max pitch error 8 deg: the front pair is over-thrust until the altitude loop catches up, and nose down authority is small |
-| 10 m/s cruise | pitch -14 deg, rear never saturated |
-| Front lag 0.2 s, rear 0.06 s, wind 8 m/s with turbulence 3 | stable; max roll error 8 deg, pitch 13 deg |
+| Test | 10% (defaults) | 15% (`y3heavy-rear15.parm`, same limits) |
+|---|---|---|
+| Roll steps 15 deg | 2.2 deg | 2.2 deg |
+| Pitch steps 15 deg | 0.7 deg | 0.7 deg |
+| 6 kg added at once | 1.8 deg | 2.7 deg |
+| 6 kg dropped at once | 1.6 deg | 3.0 deg |
+| 10 m/s cruise | 2.2 deg | 2.2 deg |
+| Stress: roll / pitch steps | 2.9 / 1.5 deg | 2.9 / 2.0 deg |
+| Stress: 6 kg added / dropped | 2.9 / 2.0 deg | 4.3 / 5.2 deg |
+| Stress: 10 m/s | 2.8 deg | 2.6 deg |
+
+- The rear reaches idle only when 6 kg arrive at once, 1-2% of that phase, in both cases; never in the pitch steps.
+- Moving 5% of the weight aft (15% on the rear rotor) raises the nose down authority by 80% and the yaw authority by 47%, but gains nothing with these limits and costs 27 W in an empty hover. Every front thrust change pitches the vehicle in proportion to the CG distance from the front axis (108 mm against 72 mm), so payload changes get worse. Stay at 10%.
+- `MOT_TRI_RH_LEARN`: from 0.15 the 10% vehicle reaches 0.192 after 10 s of hover and 0.212 (the model value) after about 30 s; from 0.30 it comes down to 0.215. At 15%, 0.25 goes to 0.327. Takeoff from the low start: 1.2 deg of pitch error.
+- First-flight set (`y3heavy-first-flight.parm`, rate gains at 60%, `MOT_TRI_RHOV` learned from 0.15): up to 3.1 deg in the roll steps, 3.2 deg at the payload drop, 2.8 deg at takeoff.
 
 ## Open points
 
 - Model numbers marked as estimates above: the X6 lag and the real rear top speed matter most.
-- Nose down authority is small (2.1 Nm). A higher rear share, a lower `MOT_SPIN_MIN` for the rear or a lower rear top speed for more resolution would help. `MOT_SPIN_MIN` and the thrust curve are shared by all three motors.
+- Nose down authority is small at 10% (2.1 Nm), so `ATC_ACC_P_MAX` stays at 200 deg/s/s. If real flights show the rear at `MOT_SPIN_MIN` often, 15% on the rear rotor nearly doubles it (`y3heavy-rear15.parm`). `MOT_SPIN_MIN` and the thrust curve are shared by all three motors.
 - On the ground the SITL model keeps the vehicle level, so it cannot show a tail lift or nose-over at takeoff.

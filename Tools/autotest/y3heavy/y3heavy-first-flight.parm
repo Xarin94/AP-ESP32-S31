@@ -1,0 +1,21 @@
+# Y3Heavy, rear rotor at 10% of the weight (the defaults), first hover
+# on the real vehicle: rate gains at 60% of copter-y3heavy.parm, softer
+# angle loop and shaping, MOT_TRI_RHOV starting low and learned in
+# ALT_HOLD or LOITER. Raise to 80% and 100% after checking the logs
+MOT_TRI_RHOV    0.15
+MOT_TRI_RH_LEARN 2
+ATC_RAT_RLL_P   0.085
+ATC_RAT_RLL_I   0.085
+ATC_RAT_RLL_D   0.0034
+ATC_RAT_PIT_P   0.331
+ATC_RAT_PIT_I   0.331
+ATC_RAT_PIT_D   0.0091
+ATC_RAT_YAW_P   0.474
+ATC_RAT_YAW_I   0.047
+ATC_RAT_YAW_D   0
+ATC_ANG_RLL_P   4.5
+ATC_ANG_PIT_P   6
+ATC_ANG_YAW_P   3
+ATC_ACC_R_MAX   400
+ATC_ACC_P_MAX   150
+ATC_ACC_Y_MAX   150

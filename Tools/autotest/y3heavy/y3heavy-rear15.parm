@@ -1,0 +1,22 @@
+# Y3Heavy with 15% of the empty weight on the rear rotor (airframe mass
+# moved aft, payload still on the front axis). Load after the defaults:
+#   y3heavy_flight.py WORKDIR --params y3heavy-rear15.parm
+# SITL only: put 15% of the weight on the rear rotor
+SIM_Y3_RSHARE   0.15
+# the model needs 0.327: start low, MOT_TRI_RH_LEARN finds it in hover
+MOT_TRI_RHOV    0.25
+ATC_RAT_RLL_P   0.142
+ATC_RAT_RLL_I   0.142
+ATC_RAT_RLL_D   0.0057
+ATC_RAT_PIT_P   0.441
+ATC_RAT_PIT_I   0.441
+ATC_RAT_PIT_D   0.0121
+ATC_RAT_YAW_P   0.534
+ATC_RAT_YAW_I   0.053
+ATC_RAT_YAW_D   0
+ATC_ANG_RLL_P   6.5
+ATC_ANG_PIT_P   9
+ATC_ANG_YAW_P   3
+ATC_ACC_R_MAX 600
+ATC_ACC_P_MAX 350
+ATC_ACC_Y_MAX 300
