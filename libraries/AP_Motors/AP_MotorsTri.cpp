@@ -358,7 +358,7 @@ void AP_MotorsTri::output_armed_stabilizing_split()
     // MOT_THST_HOVER lags payload changes by seconds: scaling by
     // throttle / hover throttle instead pitched the vehicle 24 deg in
     // SITL when 6 kg were added at once. Nose up needs less rear thrust
-    const float rear_hover = constrain_float(_tri_rear_hover, 0.02f, 0.9f);
+    const float rear_hover = constrain_float(_tri_rear_hover, AP_MOTORS_TRI_RHOV_MIN, AP_MOTORS_TRI_RHOV_MAX);
     const float ramp_throttle = AP_MOTORS_TRI_SPLIT_FF_RAMP * get_throttle_hover() * compensation_gain;
     const float rear_ff = rear_hover * compensation_gain * constrain_float(throttle_front / ramp_throttle, 0.0f, 1.0f);
     float rear_vertical = rear_ff - pitch_thrust;
@@ -399,6 +399,36 @@ void AP_MotorsTri::output_armed_stabilizing_split()
     _thrust_right = constrain_float(_thrust_right, 0.0f, 1.0f);
     _thrust_left = constrain_float(_thrust_left, 0.0f, 1.0f);
     _thrust_rear = constrain_float(_thrust_rear, 0.0f, 1.0f);
+}
+
+/*
+  split mixer: in a steady level hover the pitch output holds what
+  MOT_TRI_RHOV misses (mostly the pitch integrator), so MOT_TRI_RHOV
+  takes it over. The time constant is several times the integrator's, so
+  the integrator unwinds as MOT_TRI_RHOV moves instead of fighting it
+ */
+void AP_MotorsTri::update_throttle_hover(float dt)
+{
+    AP_MotorsMulticopter::update_throttle_hover(dt);
+
+    if (!split_mix() || _tri_rear_hover_learn == HOVER_LEARN_DISABLED || limit.pitch) {
+        return;
+    }
+    float pitch = _pitch_in + _pitch_in_ff;
+    if (_pitch_reversed) {
+        pitch *= -1.0f;
+    }
+    _tri_rear_hover.set(constrain_float(_tri_rear_hover - (dt / (dt + AP_MOTORS_TRI_RHOV_TC)) * pitch,
+                                        AP_MOTORS_TRI_RHOV_MIN, AP_MOTORS_TRI_RHOV_MAX));
+}
+
+void AP_MotorsTri::save_params_on_disarm()
+{
+    AP_MotorsMulticopter::save_params_on_disarm();
+
+    if (split_mix() && _tri_rear_hover_learn == HOVER_LEARN_AND_SAVE) {
+        _tri_rear_hover.save();
+    }
 }
 
 const char* AP_MotorsTri::get_type_string() const

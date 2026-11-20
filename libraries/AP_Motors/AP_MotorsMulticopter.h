@@ -51,7 +51,7 @@ public:
     void                update_throttle_range();
 
     // update estimated throttle required to hover
-    void                update_throttle_hover(float dt);
+    virtual void        update_throttle_hover(float dt);
     virtual float       get_throttle_hover() const override { return constrain_float(_throttle_hover, AP_MOTORS_THST_HOVER_MIN, AP_MOTORS_THST_HOVER_MAX); }
 
     // passes throttle directly to all motors for ESC calibration.
@@ -202,6 +202,7 @@ protected:
     // tricopter mixer type and, for the split mixer, rear motor hover thrust
     AP_Int8             _tri_mix;
     AP_Float            _tri_rear_hover;
+    AP_Int8             _tri_rear_hover_learn;
 
     // time to spool motors to min throttle
     AP_Float            _spool_up_time;

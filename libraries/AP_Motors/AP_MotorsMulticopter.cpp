@@ -269,11 +269,18 @@ const AP_Param::GroupInfo AP_MotorsMulticopter::var_info[] = {
 
     // @Param{Copter}: TRI_RHOV
     // @DisplayName: Tricopter rear motor hover thrust
-    // @Description: Split mixer only (MOT_TRI_MIX 1). Rear motor thrust, on the same 0 to 1 scale as MOT_THST_HOVER, that balances the front pair about the CG in hover with the payload on the front axis. In flight the rear motor runs this value plus the pitch demand; on the ground it ramps in with the front throttle, reaching it at half MOT_THST_HOVER. It also sets the yaw scaling: full yaw demand gives full tail deflection at this thrust. Read it from the rear motor output in a steady hover; set it no higher than that, or the rear can lift the tail before the vehicle leaves the ground
+    // @Description: Split mixer only (MOT_TRI_MIX 1). Rear motor thrust, on the same 0 to 1 scale as MOT_THST_HOVER, that balances the front pair about the CG in hover with the payload on the front axis. In flight the rear motor runs this value plus the pitch demand; on the ground it ramps in with the front throttle, reaching it at half MOT_THST_HOVER. It also sets the yaw scaling: full yaw demand gives full tail deflection at this thrust. MOT_TRI_RH_LEARN learns it in flight. Start low rather than high: too high, the rear can lift the tail before the vehicle leaves the ground
     // @Range: 0.02 0.9
     // @Increment: 0.01
     // @User: Advanced
-    AP_GROUPINFO_FRAME("TRI_RHOV", 61, AP_MotorsMulticopter, _tri_rear_hover, 0.2, AP_PARAM_FRAME_TRICOPTER),
+    AP_GROUPINFO_FRAME("TRI_RHOV", 61, AP_MotorsMulticopter, _tri_rear_hover, 0.15, AP_PARAM_FRAME_TRICOPTER),
+
+    // @Param{Copter}: TRI_RH_LEARN
+    // @DisplayName: Tricopter rear hover thrust learning
+    // @Description: Split mixer only (MOT_TRI_MIX 1). Learns MOT_TRI_RHOV in a steady level hover, in the modes and conditions where MOT_HOVER_LEARN learns MOT_THST_HOVER: the pitch output there is what MOT_TRI_RHOV misses, and MOT_TRI_RHOV takes it over with a 5 s time constant. Learn and Save saves the value on disarm
+    // @Values: 0:Disabled, 1:Learn, 2:Learn and Save
+    // @User: Advanced
+    AP_GROUPINFO_FRAME("TRI_RH_LEARN", 62, AP_MotorsMulticopter, _tri_rear_hover_learn, HOVER_LEARN_AND_SAVE, AP_PARAM_FRAME_TRICOPTER),
 
     AP_GROUPEND
 };

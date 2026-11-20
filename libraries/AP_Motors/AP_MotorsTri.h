@@ -19,6 +19,10 @@
 // split mixer: the rear motor feed-forward reaches MOT_TRI_RHOV at this
 // fraction of the hover throttle
 #define AP_MOTORS_TRI_SPLIT_FF_RAMP         0.5f
+// split mixer: MOT_TRI_RHOV range and learning time constant (s)
+#define AP_MOTORS_TRI_RHOV_MIN              0.02f
+#define AP_MOTORS_TRI_RHOV_MAX              0.9f
+#define AP_MOTORS_TRI_RHOV_TC               5.0f
 
 /// @class      AP_MotorsTri
 class AP_MotorsTri : public AP_MotorsMulticopter {
@@ -61,6 +65,13 @@ public:
 
     // Run arming checks
     bool arming_checks(size_t buflen, char *buffer) const override;
+
+    // learn the hover throttle and, for the split mixer, the rear motor
+    // hover thrust; called by the vehicle in a steady level hover
+    void update_throttle_hover(float dt) override;
+
+    // save learned values
+    void save_params_on_disarm() override;
 
     // Get the testing order for the motors, this is used for AP_Motors_test
     uint8_t get_motor_test_order(uint8_t i);
