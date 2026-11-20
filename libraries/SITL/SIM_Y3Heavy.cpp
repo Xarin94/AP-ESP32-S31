@@ -85,17 +85,17 @@ const AP_Param::GroupInfo Y3Heavy::var_info[] = {
 
     // @Param: FTAU
     // @DisplayName: Y3Heavy front rotor time constant
-    // @Description: First order time constant of the front rotor speed
+    // @Description: First order time constant of the front rotor speed. 0.07 s is an estimate for a speed-controlled FOC ESC on a 24 inch prop
     // @Units: s
     // @User: Advanced
-    AP_GROUPINFO("FTAU", 9, Y3Heavy, front_tau, 0.10),
+    AP_GROUPINFO("FTAU", 9, Y3Heavy, front_tau, 0.07),
 
     // @Param: RTAU
     // @DisplayName: Y3Heavy rear rotor time constant
-    // @Description: First order time constant of the rear rotor speed
+    // @Description: First order time constant of the rear rotor speed. 0.035 s is an estimate
     // @Units: s
     // @User: Advanced
-    AP_GROUPINFO("RTAU", 10, Y3Heavy, rear_tau, 0.04),
+    AP_GROUPINFO("RTAU", 10, Y3Heavy, rear_tau, 0.035),
 
     // @Param: SV_T60
     // @DisplayName: Y3Heavy tail servo speed
@@ -128,6 +128,13 @@ const AP_Param::GroupInfo Y3Heavy::var_info[] = {
     // @Values: 0:right CCW left CW,1:right CW left CCW
     // @User: Advanced
     AP_GROUPINFO("FSPIN", 15, Y3Heavy, front_spin, 0),
+
+    // @Param: SV_TAU
+    // @DisplayName: Y3Heavy tail servo time constant
+    // @Description: First order time constant of the tail servo for small moves, before its speed limit SIM_Y3_SV_T60
+    // @Units: s
+    // @User: Advanced
+    AP_GROUPINFO("SV_TAU", 16, Y3Heavy, servo_tau, 0.025),
 
     AP_GROUPEND
 };
@@ -307,12 +314,14 @@ void Y3Heavy::calculate_forces(const struct sitl_input &input, Vector3f &rot_acc
         omega[i] = MAX(omega[i] + omega_dot[i] * dt, 0.0f);
     }
 
-    // tail servo, rate limited. No pulse: the servo holds where it is
+    // tail servo: first order for small moves, rate limited for large
+    // ones. No pulse: the servo holds where it is
     if (input.servos[6] != 0) {
         const float demand = -radians(TAIL_ANGLE_MAX_DEG) *
             constrain_float((input.servos[6] - TAIL_PWM_TRIM) / TAIL_PWM_HALF_RANGE, -1, 1);
+        const float lag_step = (demand - tail_angle) * MIN(dt / MAX(servo_tau.get(), dt), 1.0f);
         const float max_step = radians(60) / MAX(servo_time_60.get(), 0.01f) * dt;
-        tail_angle += constrain_float(demand - tail_angle, -max_step, max_step);
+        tail_angle += constrain_float(lag_step, -max_step, max_step);
     }
 
     // rotor geometry about the CG, body frame

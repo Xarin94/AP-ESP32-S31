@@ -65,6 +65,7 @@ private:
     AP_Float rear_cp;
     AP_Float rear_diameter;
     AP_Int8  front_spin;
+    AP_Float servo_tau;
 
     enum Rotor : uint8_t {
         RIGHT = 0,
