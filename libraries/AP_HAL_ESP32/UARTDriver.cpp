@@ -70,6 +70,14 @@ void UARTDriver::vprintf(const char *fmt, va_list ap)
 void UARTDriver::apply_pins()
 {
     const UARTDesc &d = uart_desc[uart_num];
+    // a pin keeps its output driver and its signal until it is reset, also
+    // over a software reboot
+    if (d.rx != GPIO_NUM_NC) {
+        gpio_reset_pin(d.rx);
+    }
+    if (d.tx != GPIO_NUM_NC) {
+        gpio_reset_pin(d.tx);
+    }
     const bool swap = option_is_set(OPTION_SWAP);
     uart_set_pin(d.port,
                  swap ? d.rx : d.tx,
@@ -125,14 +133,6 @@ bool UARTDriver::set_options(uint16_t options)
         apply_inversion();
     }
     if (_initialized && swap_changed) {
-        // the GPIO matrix keeps a pin on its old signal until it is reset
-        const UARTDesc &d = uart_desc[uart_num];
-        if (d.rx != GPIO_NUM_NC) {
-            gpio_reset_pin(d.rx);
-        }
-        if (d.tx != GPIO_NUM_NC) {
-            gpio_reset_pin(d.tx);
-        }
         apply_pins();
     }
     return (options & ~(OPTION_SWAP | OPTION_RXINV | OPTION_TXINV)) == 0;
