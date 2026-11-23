@@ -86,10 +86,16 @@ public:
 
     bool set_options(uint16_t options) override;
 
+    void configure_parity(uint8_t v) override;
+    void set_stop_bits(int n) override;
+
 private:
     void apply_pins();
+    void apply_inversion();
+    bool is_hw_uart() const;
 
     bool _initialized;
+    bool _two_stop_bits;
     const size_t TX_BUF_SIZE = 1024;
     const size_t RX_BUF_SIZE = 1024;
     uint8_t _buffer[32];

@@ -38,6 +38,23 @@ static inline bool is_usb_serial_jtag(uart_port_t p)
 #endif
 }
 
+static uart_parity_t parity_mode(uint8_t v)
+{
+    switch (v) {
+    case 1:
+        return UART_PARITY_ODD;
+    case 2:
+        return UART_PARITY_EVEN;
+    default:
+        return UART_PARITY_DISABLE;
+    }
+}
+
+bool UARTDriver::is_hw_uart() const
+{
+    return uart_num < ARRAY_SIZE(uart_desc) && !is_usb_serial_jtag(uart_desc[uart_num].port);
+}
+
 void UARTDriver::vprintf(const char *fmt, va_list ap)
 {
 
@@ -60,13 +77,53 @@ void UARTDriver::apply_pins()
                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 }
 
+// invert the RX and TX lines as asked by OPTION_RXINV and OPTION_TXINV
+void UARTDriver::apply_inversion()
+{
+    uint32_t mask = UART_SIGNAL_INV_DISABLE;
+    if (option_is_set(OPTION_RXINV)) {
+        mask |= UART_SIGNAL_RXD_INV;
+    }
+    if (option_is_set(OPTION_TXINV)) {
+        mask |= UART_SIGNAL_TXD_INV;
+    }
+    uart_set_line_inverse(uart_desc[uart_num].port, mask);
+}
+
+void UARTDriver::configure_parity(uint8_t v)
+{
+    if (!is_hw_uart()) {
+        return;
+    }
+    parity = v;
+    if (_initialized) {
+        uart_set_parity(uart_desc[uart_num].port, parity_mode(v));
+    }
+}
+
+void UARTDriver::set_stop_bits(int n)
+{
+    if (!is_hw_uart()) {
+        return;
+    }
+    _two_stop_bits = n == 2;
+    if (_initialized) {
+        uart_set_stop_bits(uart_desc[uart_num].port,
+                           _two_stop_bits ? UART_STOP_BITS_2 : UART_STOP_BITS_1);
+    }
+}
+
 bool UARTDriver::set_options(uint16_t options)
 {
-    if (uart_num >= ARRAY_SIZE(uart_desc) || is_usb_serial_jtag(uart_desc[uart_num].port)) {
+    if (!is_hw_uart()) {
         return AP_HAL::UARTDriver::set_options(options);
     }
-    const bool swap_changed = ((options ^ _last_options) & OPTION_SWAP) != 0;
+    const uint16_t changed = options ^ _last_options;
+    const bool swap_changed = (changed & OPTION_SWAP) != 0;
     _last_options = options;
+    if (_initialized && (changed & (OPTION_RXINV | OPTION_TXINV)) != 0) {
+        apply_inversion();
+    }
     if (_initialized && swap_changed) {
         // the GPIO matrix keeps a pin on its old signal until it is reset
         const UARTDesc &d = uart_desc[uart_num];
@@ -78,7 +135,7 @@ bool UARTDriver::set_options(uint16_t options)
         }
         apply_pins();
     }
-    return (options & ~OPTION_SWAP) == 0;
+    return (options & ~(OPTION_SWAP | OPTION_RXINV | OPTION_TXINV)) == 0;
 }
 
 void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
@@ -121,11 +178,12 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
             uart_config_t config = {
                 .baud_rate = (int)b,
                 .data_bits = UART_DATA_8_BITS,
-                .parity = UART_PARITY_DISABLE,
-                .stop_bits = UART_STOP_BITS_1,
+                .parity = parity_mode(parity),
+                .stop_bits = _two_stop_bits ? UART_STOP_BITS_2 : UART_STOP_BITS_1,
                 .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
             };
             uart_param_config(p, &config);
+            apply_inversion();
             apply_pins();
             //uart_driver_install(p, 2*UART_FIFO_LEN, 0, 0, nullptr, 0);
             uart_driver_install(p, 2*UART_HW_FIFO_LEN(p), 0, 0, nullptr, 0);
