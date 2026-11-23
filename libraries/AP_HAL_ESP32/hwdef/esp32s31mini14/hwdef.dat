@@ -82,11 +82,14 @@ ESP32_SERIAL USB_SERIAL_JTAG  GPIO_NUM_NC  GPIO_NUM_NC
 # DAN-F10N: rxgps (IO3) from its TXD, txgps (IO4) to its RXD. Its
 # TIMEPULSE is on IO5, not used: the ESP32 HAL has no PPS input
 ESP32_SERIAL UART_NUM_1       GPIO_NUM_3   GPIO_NUM_4
-# connectors S2 (U7) and S1 (U4): IO10/IO11 and IO8/IO9 as measured on the
-# V1.2. The pin marked R (IO10, IO8) is the board RX: it goes to the TX of
-# the device
+# connectors S2 (U7, SERIAL2) and S1 (U4, SERIAL4): IO10/IO11 and IO8/IO9 as
+# measured on the V1.2. The pin marked R (IO10, IO8) is the board RX: it
+# goes to the TX of the device
 ESP32_SERIAL UART_NUM_2       GPIO_NUM_10  GPIO_NUM_11
-ESP32_SERIAL UART_NUM_3       GPIO_NUM_8   GPIO_NUM_9
+# SERIAL4 is on UART0, free because the console is on the USB: ESP-IDF 6.1 has
+# no GPIO matrix signals for the UART3 of the S31 (-1 in uart_periph.c), so
+# UART3 is never connected to its pins
+ESP32_SERIAL UART_NUM_0       GPIO_NUM_8   GPIO_NUM_9
 
 # time per loop for the GCS on ArduPlane at the 200 Hz loop
 define PLANE_GCS_SEND_TIME_US 750

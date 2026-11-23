@@ -59,7 +59,8 @@ void UARTDriver::vprintf(const char *fmt, va_list ap)
 {
 
     uart_port_t p = uart_desc[uart_num].port;
-    if (p == 0) {
+    // UART0 is the ESP-IDF console only as SERIAL0
+    if (uart_num == 0 && p == 0) {
         esp_log_writev(ESP_LOG_INFO, "", fmt, ap);
     } else {
         AP_HAL::UARTDriver::vprintf(fmt, ap);

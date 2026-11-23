@@ -126,9 +126,13 @@ ESP32_SERIAL USB_SERIAL_JTAG  GPIO_NUM_NC  GPIO_NUM_NC
 ESP32_SERIAL UART_NUM_1       GPIO_NUM_3   GPIO_NUM_4
 # connectors S2 and S1: IO10/IO11 and IO8/IO9 as measured on the V1.2 (IO12/13
 # and IO10/11 in the schematic). The pin marked R (IO10, IO8) is the board RX:
-# it goes to the TX of the device. S1 is SERIAL4 (it was SERIAL3 on the V1.2)
+# it goes to the TX of the device. S1 is SERIAL4 (it was SERIAL3 on the V1.2),
+# S2 is SERIAL2, S3 is SERIAL3 (IO3/IO4)
 ESP32_SERIAL UART_NUM_2       GPIO_NUM_10  GPIO_NUM_11
-ESP32_SERIAL UART_NUM_3       GPIO_NUM_8   GPIO_NUM_9
+# SERIAL4 is on UART0, free because the console is on the USB: ESP-IDF 6.1 has
+# no GPIO matrix signals for the UART3 of the S31 (-1 in uart_periph.c), so
+# UART3 is never connected to its pins
+ESP32_SERIAL UART_NUM_0       GPIO_NUM_8   GPIO_NUM_9
 
 # time per loop for the GCS. The board runs a 200 Hz loop (SCHED_LOOP_RATE in
 # defaults.parm), 5 ms per loop: the budget must fit in what the fast tasks
