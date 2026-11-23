@@ -33,7 +33,7 @@ On the V1.2 the module pads 42-53 were found not to be on the GPIO named by the 
 | RM3100 CS | `CSmag` | pad 52 (see above) | 2 |
 | ELVH CS | `TOT` | 38 | 38 |
 | SD card CS | `cssd` | 39 | 39 |
-| GPS serial RX / TX | `rxgps` / `txgps` | 3 / 4, DAN-F10N on the board | 3 / 4 |
+| GPS serial RX / TX (S3) | `rxgps` / `txgps` | 3 / 4, DAN-F10N on the board | 3 / 4 (connector S3) |
 | GPS RESET_N | `GPSrst` | 2 | (IO2 is `CSmag`) |
 | GPS TIMEPULSE | `TP` | 5 | no line |
 | UART1 RX / TX (connector S1) | `UART1RX` / `UART1TX` | 8 / 9 | 8 / 9 |
@@ -48,7 +48,7 @@ Common to both boards:
 - The pin marked `R` on S1 and S2 is the board RX: it goes to the TX of the device.
 - IO36 and IO37 (MOSI2, MISO2) are strapping pins of the S31.
 - SERVO outputs share one timer per pair (1-2, 3-4, 5-6, 7-8), so one frequency per pair.
-- No dedicated RC input pin: RC comes from a serial protocol.
+- No dedicated RC input pin: RC comes from a serial protocol or over MAVLink.
 
 ## ArduPilot mapping of the V1.4 (`esp32s31mini14`)
 
@@ -56,12 +56,14 @@ Common to both boards:
 |---|---|---|
 | SERIAL0 | USB Serial/JTAG | MAVLink, ESP-IDF console |
 | SERIAL1 | Wi-Fi access point `ardupilot-s31` | MAVLink, UDP 192.168.4.1:14550 |
-| SERIAL2 | UART2, connector S2 | MAVLink |
-| SERIAL3 | DAN-F10N (IO3/IO4) | GPS1, auto-configured |
-| SERIAL4 | UART1, connector S1 | serial RC (`SERIAL4_PROTOCOL 23`) |
+| SERIAL2 | connector S2 (net UART2), ESP32 UART2 | MAVLink2 at 230400, LTE telemetry |
+| SERIAL3 | S3: DAN-F10N (IO3/IO4), ESP32 UART1 | GPS1, auto-configured |
+| SERIAL4 | connector S1 (net UART1), ESP32 UART0 | rangefinder at 115200 (`SERIAL4_PROTOCOL 9`) |
 | IMU | SCH16T on SPI bus 1 | `ROTATION_ROLL_180` |
 | Baros | 2x BMP581 on SPI bus 2 | |
 | CAN1 | TWAI on the MCP2542FD (TX IO57, RX IO56) | DroneCAN, 1 Mbit/s |
+
+S1, S2 and S3 take any serial protocol of ArduPilot (`SERIALn_PROTOCOL`); on the V1.4 S3 is wired to the DAN-F10N. The HAL sets parity, stop bits, RX and TX inversion (`SERIALn_OPTIONS` bits 0 and 1) and the RX/TX swap (bit 3); half-duplex, flow control and the pull options are not supported. SERIAL4 is on the UART0 of the S31, free because the console is on the USB: ESP-IDF 6.1 has no GPIO matrix signals for the UART3 of the S31 (`-1` in `uart_periph.c`), so UART3 is never connected to its pins. A TFmini on S1 needs `RNGFND1_TYPE 20`.
 
 The hwdef is for a V1.4 without RM3100, SD card and ELVH mounted: none of them is configured, and there is no log. IO2 is listed as an SPI chip select that no driver opens, so the HAL drives it high at boot and keeps the GPS out of reset.
 
@@ -69,7 +71,7 @@ The hwdef is for a V1.4 without RM3100, SD card and ELVH mounted: none of them i
 
 CAN: DroneCAN on CAN1 at 1 Mbit/s (`CAN_P1_DRIVER 1`, `CAN_D1_PROTOCOL 1`); the servos stay on PWM. SLCAN works as on the STM32 boards with one USB port: with `CAN_SLCAN_CPORT 1` (read at boot) and `CAN_SLCAN_SERNUM 0` the USB (SERIAL0) becomes an SLCAN adapter on CAN1 until `CAN_SLCAN_TIMOUT` or a reboot, and Mission Planner sets this by itself. The S31 cannot add a second USB CDC for a dedicated SLCAN port: the USB connector (IO33/IO34) is the USB Serial/JTAG, which has one fixed CDC, and the USB OTG of the S31 has only the HS (UTMI) PHY, on other pads. Over MAVLink (USB or Wi-Fi) the CAN bus is also reachable with `MAV_CMD_CAN_FORWARD` ("MAVLink-CAN" in Mission Planner, `mavcan:` in the DroneCAN GUI tool).
 
-Checked on the V1.4 with ArduCopter, at rest and indoors: SCH16T (about -1000 mG on Z at rest, so the K10 variant is right), both BMP581, the DAN-F10N on SERIAL3 in both directions at 10 Hz, the 400 Hz main loop. Not checked yet: CAN, the PWM signals, connectors S1 and S2, the LEDs, a GPS fix and flight.
+Checked on the V1.4 with ArduCopter, at rest and indoors: SCH16T (about -1000 mG on Z at rest, so the K10 variant is right), both BMP581, the DAN-F10N on SERIAL3 in both directions at 10 Hz, the 400 Hz main loop, a TFmini on S1 (SERIAL4), with the RX inversion and the swap. Not checked yet: CAN, the PWM signals, a device on S2, a serial device with parity, the LEDs, a GPS fix and flight.
 
 ## DAN-F10N on the V1.4
 

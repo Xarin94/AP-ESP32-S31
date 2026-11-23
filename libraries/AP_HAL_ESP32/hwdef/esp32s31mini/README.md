@@ -57,7 +57,7 @@ If Windows reports "USB device not recognized": with the USB unplugged, connect 
 | RM3100 CS (`CSmag`) | 2 | `COMPASS RM3100`, `ROTATION_ROLL_180` (module upside down under the board) |
 | ELVH CS (`TOT`) | 38 | airspeed `SPI:elvh`, `ARSPD_TYPE 21` |
 | SD memory CS (`cssd`) | 39 | `ESP32_SDSPI SPI3_HOST`, logs in `/SDCARD/APM/LOGS` |
-| GPS serial RX / TX (`rxgps` / `txgps`) | 3 / 4 | SERIAL3, GPS |
+| GPS serial RX / TX (`rxgps` / `txgps`) | 3 / 4 (connector S3) | SERIAL3, GPS |
 | UART2 RX / TX | 10 / 11 (connector S2) | SERIAL2, telemetry or serial RC (CRSF/ELRS: `SERIAL2_PROTOCOL 23`) |
 | UART1 RX / TX | 8 / 9 (connector S1) | **SERIAL4** (SERIAL3 on the V1.2) |
 | USB D- / D+ | 33 / 34 | SERIAL0 (USB Serial/JTAG, MAVLink) and ESP-IDF console |
@@ -167,7 +167,8 @@ TWAI controller on the MCP2542FD transceiver, TX IO57 and RX IO56. `defaults.par
 
 - SERIAL0: USB Serial/JTAG, MAVLink and the ESP-IDF console (start-up log, HAL messages, panics) on the same port; a GCS skips the text. With DTR low and RTS high the USB Serial/JTAG resets the chip, and on the S31 (chip revision v0.0) `HAL_ESP32_USB_NO_CHIP_RESET` does not stop it, although the disable bit reads back set. Linux raises DTR and RTS when the port is opened and pyserial (pymavlink, MAVProxy) then lowers DTR first, which resets the board: it reboots in a few seconds. To connect without a reset, open the port and lower RTS before DTR (pyserial: `s = serial.Serial(port); s.rts = False; s.dtr = False`).
 - SERIAL1: Wi-Fi UDP.
-- SERIAL2: UART on connector S2. SERIAL3: GPS serial (IO3/IO4). SERIAL4: UART on connector S1. The ESP32 HAL supports `SERIALn_OPTIONS` bit 3 (RX/TX swap).
+- SERIAL2: UART on connector S2. SERIAL3: UART on connector S3 (IO3/IO4), GPS by default. SERIAL4: UART on connector S1. All three take any serial protocol (`SERIALn_PROTOCOL`). The ESP32 HAL sets parity, stop bits, RX and TX inversion (`SERIALn_OPTIONS` bits 0 and 1) and the RX/TX swap (bit 3), not half-duplex, flow control and the pull options.
+- SERIAL4 is on the UART0 of the S31, because ESP-IDF 6.1 has no GPIO matrix signals for the UART3 of the S31 and never connects it to the pins. Checked on the V1.4, only compiled for the V1.5.
 - Stream rates are per MAVLink channel (`MAVn_*`): SERIAL0 is MAV1, Wi-Fi MAV2, SERIAL2 MAV3.
 
 ## Live FFT
@@ -242,8 +243,8 @@ Build:
 
 ESP32 HAL on ESP-IDF 6.1:
 - `CANIface` (new): CAN on TWAI with the `esp_twai` node driver; RX through a FreeRTOS queue from the ISR, TX slots, loopback for the DroneCAN time sync, bus-off recovery at 1 Hz.
-- `UARTDriver`: `USB_SERIAL_JTAG` port; RX/TX swap with `SERIALn_OPTIONS`; the console moves to the USB Serial/JTAG driver when SERIAL0 opens.
-- Console on the USB Serial/JTAG (`sdkconfig.defaults`): UART0 is not routed on the board.
+- `UARTDriver`: `USB_SERIAL_JTAG` port; RX/TX swap and inversion with `SERIALn_OPTIONS`, parity and stop bits; the console moves to the USB Serial/JTAG driver when SERIAL0 opens.
+- Console on the USB Serial/JTAG (`sdkconfig.defaults`): UART0 is SERIAL4.
 - `Scheduler`, `DeviceBus`, `WiFi*`: cores set from the hwdef, bus and library threads with a fixed affinity.
 - `SPIDevice`: short transfers (≤ 64 bytes) polled; all CS driven high before any bus setup; stop at boot when an SPI host has no room for a device.
 - `Util`: load of each core from the FreeRTOS idle time; LP core results in `@SYS/threads.txt`.

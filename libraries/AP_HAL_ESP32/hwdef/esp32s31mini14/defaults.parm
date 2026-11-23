@@ -24,8 +24,13 @@ EK3_ABIAS_P_NSE 0.0008
 # ArduCopter: tricopter (motors on SERVO1, SERVO2, SERVO4, tail servo on
 # SERVO7)
 FRAME_CLASS 7
-# connector S1 (SERIAL4): serial RC receiver (CRSF/ELRS/SBUS)
-SERIAL4_PROTOCOL 23
+# connector S2 (SERIAL2): LTE telemetry, MAVLink2 at 230400
+SERIAL2_PROTOCOL 2
+SERIAL2_BAUD 230
+# connector S1 (SERIAL4): rangefinder (TFmini: RNGFND1_TYPE 20); the RC
+# commands come over MAVLink
+SERIAL4_PROTOCOL 9
+SERIAL4_BAUD 115
 # DroneCAN at 1 Mbit/s on CAN1; servos and ESCs stay on PWM
 CAN_P1_DRIVER 1
 CAN_P1_BITRATE 1000000
