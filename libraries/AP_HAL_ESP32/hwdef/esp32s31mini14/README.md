@@ -54,7 +54,7 @@ Common to both boards:
 
 | Port / device | Hardware | Default |
 |---|---|---|
-| SERIAL0 | USB Serial/JTAG | MAVLink, ESP-IDF console |
+| SERIAL0 | USB Serial/JTAG | MAVLink; ESP-IDF console text only during the start-up (`HAL_ESP32_CONSOLE_SETUP_ONLY`) |
 | SERIAL1 | Wi-Fi access point `ardupilot-s31` | MAVLink, UDP 192.168.4.1:14550 |
 | SERIAL2 | connector S2 (net UART2), ESP32 UART2 | MAVLink2 at 230400, LTE telemetry |
 | SERIAL3 | S3: DAN-F10N (IO3/IO4), ESP32 UART1 | GPS1, auto-configured |

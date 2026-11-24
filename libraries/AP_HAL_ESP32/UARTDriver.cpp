@@ -57,6 +57,12 @@ bool UARTDriver::is_hw_uart() const
 
 void UARTDriver::vprintf(const char *fmt, va_list ap)
 {
+#ifdef HAL_ESP32_CONSOLE_SETUP_ONLY
+    // no text in the MAVLink stream of SERIAL0 after setup()
+    if (uart_num == 0 && hal.scheduler->is_system_initialized()) {
+        return;
+    }
+#endif
 
     uart_port_t p = uart_desc[uart_num].port;
     // UART0 is the ESP-IDF console only as SERIAL0

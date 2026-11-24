@@ -99,6 +99,10 @@ define PLANE_GCS_SEND_TIME_US 750
 # port lowering RTS first)
 define HAL_ESP32_USB_NO_CHIP_RESET 1
 
+# the ESP-IDF console shares the USB with MAVLink: text only until the end of
+# setup(), then SERIAL0 carries MAVLink alone (a crash dump is still printed)
+define HAL_ESP32_CONSOLE_SETUP_ONLY 1
+
 # MAVLink over Wi-Fi UDP (SERIAL1): access point, 192.168.4.1:14550
 define HAL_ESP32_WIFI 2
 define WIFI_SSID "ardupilot-s31"

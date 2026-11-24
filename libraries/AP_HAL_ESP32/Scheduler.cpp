@@ -24,6 +24,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "esp_log.h"
 #include "esp_task_wdt.h"
 
 #include <AP_HAL/AP_HAL.h>
@@ -367,6 +368,11 @@ void Scheduler::set_system_initialized()
     if (_initialized) {
         AP_HAL::panic("PANIC: scheduler::system_initialized called more than once");
     }
+
+#ifdef HAL_ESP32_CONSOLE_SETUP_ONLY
+    // no ESP-IDF messages in the MAVLink stream of SERIAL0 from here on
+    esp_log_level_set("*", ESP_LOG_NONE);
+#endif
 
     _initialized = true;
 }
