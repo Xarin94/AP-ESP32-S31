@@ -72,8 +72,11 @@ private:
     // on an empty bus every frame ends in bus-off: retry at this period
     static constexpr uint32_t BUSOFF_RECOVER_MS = 1000;
     // TX frames are referenced by the driver until sent, so each one owns a
-    // slot that is released by the TX-done interrupt
-    static constexpr uint8_t TX_SLOTS = 2 * TX_QUEUE_DEPTH;
+    // slot that is released by the TX-done interrupt. No more slots than the
+    // driver queue takes: without another node on the bus nothing is
+    // acknowledged, the queue stays full and twai_node_transmit prints an
+    // error through the ROM at every frame, into the USB console stream
+    static constexpr uint8_t TX_SLOTS = TX_QUEUE_DEPTH;
     static constexpr uint16_t RX_QUEUE_DEPTH = 128;
 
     struct TxSlot {
