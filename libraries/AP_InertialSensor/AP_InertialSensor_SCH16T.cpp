@@ -43,6 +43,9 @@ extern const AP_HAL::HAL& hal;
 #endif
 #define BACKEND_SAMPLE_RATE HAL_SCH16T_SAMPLE_RATE
 
+// the temperature is published once every this many samples
+static constexpr uint8_t TEMPERATURE_DIVIDER = 100;
+
 // 48-bit MOSI frame: [47:38] TA+SA address, [37] RW, [35:32] FT, [27:8] data, [7:0] CRC
 static constexpr uint64_t CMD_READ_RATE_X   = 0x004800000000ULL;
 static constexpr uint64_t CMD_READ_RATE_Y   = 0x008800000000ULL;
@@ -112,7 +115,9 @@ AP_InertialSensor_SCH16T::AP_InertialSensor_SCH16T(AP_InertialSensor &imu,
     , dev(std::move(_dev))
     , rotation(_rotation)
     , pending_command(0)
-    , temperature_counter(0)
+    // the first reading is published at once: the gyro calibration at boot
+    // takes its start temperature (INS_GYR1_CALTEMP) 25 ms after the start
+    , temperature_counter(TEMPERATURE_DIVIDER - 1)
 {
 }
 
@@ -326,7 +331,7 @@ void AP_InertialSensor_SCH16T::read_sample(uint64_t sample_us)
         const uint64_t response = transfer_frame(command);
         if (i == 0) {
             if (previous != 0 && (frame_flags(response, previous) & FRAME_ERRORS) == 0 &&
-                ++temperature_counter >= 100) {
+                ++temperature_counter >= TEMPERATURE_DIVIDER) {
                 temperature_counter = 0;
                 // 16-bit value left-aligned in the data field, 100 LSB/degC
                 _publish_temperature(accel_instance, (frame_value(response) >> 4) * 0.01f);
