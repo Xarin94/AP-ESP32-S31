@@ -62,6 +62,10 @@ define HAL_SCH16T_SAMPLE_RATE 1000
 # live vibration spectrum of the IMU over MAVLink (INS_FFT_LIVE)
 define AP_INERTIALSENSOR_SPECTRUM_ENABLED 1
 
+# IMU temperature calibration (INS_TCAL1_*): off until INS_TCAL1_ENABLE is set,
+# 2 learns it from a cold start
+define HAL_INS_TEMPERATURE_CAL_ENABLE 1
+
 # sensor axes as on the V1.2 and V1.5: SCH16T x, -y, -z
 IMU SCH16T SPI:sch16t ROTATION_ROLL_180
 define HAL_INS_DEFAULT HAL_INS_NONE
