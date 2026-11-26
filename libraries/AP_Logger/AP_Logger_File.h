@@ -18,6 +18,8 @@
 #define HAL_LOGGER_WRITE_CHUNK_SIZE 2048
 #elif AP_FILESYSTEM_FATFS_ENABLED
 #define HAL_LOGGER_WRITE_CHUNK_SIZE (AP_Filesystem_FATFS::get_io_size())
+#elif AP_FILESYSTEM_ESP32_ENABLED
+#define HAL_LOGGER_WRITE_CHUNK_SIZE HAL_ESP32_FS_IO_SIZE
 #else
 #define HAL_LOGGER_WRITE_CHUNK_SIZE AP_FATFS_MIN_IO_SIZE
 #endif
@@ -113,7 +115,7 @@ private:
 
     // write buffer
     ByteBuffer _writebuf{0};
-    const uint16_t _writebuf_chunk = HAL_LOGGER_WRITE_CHUNK_SIZE;
+    const uint32_t _writebuf_chunk = HAL_LOGGER_WRITE_CHUNK_SIZE;
     uint32_t _last_write_time;
 
     /* construct a file name given a log number. Caller must free. */
