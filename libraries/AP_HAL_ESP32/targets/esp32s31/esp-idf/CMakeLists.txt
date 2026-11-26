@@ -10,6 +10,11 @@ include($ENV{IDF_PATH}/tools/cmake/idf.cmake)
 # LP core supervisor: HP loader and LP program (AP_HAL_ESP32/LPSupervisor)
 idf_build_component(${CMAKE_CURRENT_LIST_DIR}/components/lp_supervisor)
 
+# SD card in SPI mode: ESP-IDF esp_driver_sdspi with the bus released while
+# the card is busy (components/esp_driver_sdspi); added after the ESP-IDF
+# components, so it replaces theirs
+idf_build_component(${CMAKE_CURRENT_LIST_DIR}/components/esp_driver_sdspi)
+
 # ESP-IDF settings: those of the target, then those of the board when its
 # hwdef directory has a sdkconfig.defaults (passed by waf)
 set(sdkconfig_defaults ${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults)
