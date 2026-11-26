@@ -64,16 +64,30 @@ ESP32_SPIDEV elvh      1   3      GPIO_NUM_38  0    500*KHZ  500*KHZ
 ESP32_SPIDEV sdcs      1   4      GPIO_NUM_39  0    400*KHZ  400*KHZ
 
 # SD memory (soldered) in SPI mode on the second bus, shared with the
-# sensors: logs.
+# sensors: logs. Same pins on the later board versions.
 # 20 MHz after the card is identified at 400 kHz; lower it if the card does
 # not mount or the log has write errors
 define HAL_ESP32_SDCARD 1
 #           Host      DMA Channel     MOSI        MISO        SCLK        CS
 ESP32_SDSPI SPI3_HOST SPI_DMA_CH_AUTO GPIO_NUM_36 GPIO_NUM_37 GPIO_NUM_35 GPIO_NUM_39
 define HAL_ESP32_SDSPI_MAX_FREQ_KHZ 20000
+# MISO does not go high with the card deselected: no wait before each
+# command (the default is a 40 ms busy loop holding the bus). While the card
+# is busy writing, the driver (targets/esp32s31/esp-idf/components/
+# esp_driver_sdspi) deselects it and releases the bus to the sensors
+define HAL_ESP32_SDSPI_WAIT_FOR_MISO -1
 define AP_FILESYSTEM_ESP32_ENABLED 1
 define HAL_LOGGING_BACKENDS_DEFAULT 1
 define HAL_LOGGING_STACK_SIZE 4096
+# log written in 32 kB blocks with an fsync after each (about 1 s of log at
+# LOG_BITMASK 65535), from a 48 kB buffer
+define HAL_ESP32_FS_IO_SIZE 32768
+define HAL_ESP32_FS_FSYNC_SIZE 32768
+define HAL_LOGGING_FILE_BUFSIZE 48
+# old logs are deleted at boot to keep this much free: the ArduPilot default,
+# 500 MB, is more than the 480 MB card (every log deleted at each boot);
+# 128 MB is about an hour of log at LOG_BITMASK 65535
+define HAL_LOGGER_MIN_MB_FREE 128
 
 # SCH16T variant mounted on the board (K10 by default):
 #   1  = SCH16T-K01, high precision, +-300 deg/s, +-8 g
