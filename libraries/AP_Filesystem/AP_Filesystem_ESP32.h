@@ -27,6 +27,17 @@
 
 #include "AP_Filesystem_backend.h"
 
+// size of the log writes, and distance between two fsync() of a file
+// written in sequence (the log), both multiples of the 512 byte sector.
+// Each fsync() rewrites the FAT and the directory entry of the file. The log
+// buffer (LOG_FILE_BUFSIZE) must be larger than HAL_ESP32_FS_IO_SIZE
+#ifndef HAL_ESP32_FS_IO_SIZE
+#define HAL_ESP32_FS_IO_SIZE 4096
+#endif
+#ifndef HAL_ESP32_FS_FSYNC_SIZE
+#define HAL_ESP32_FS_FSYNC_SIZE HAL_ESP32_FS_IO_SIZE
+#endif
+
 class AP_Filesystem_ESP32 : public AP_Filesystem_Backend
 {
 public:
