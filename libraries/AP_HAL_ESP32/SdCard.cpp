@@ -36,6 +36,8 @@
 #include "driver/sdmmc_host.h"
 #include "driver/sdspi_host.h"
 #include "sdmmc_cmd.h"
+#include "driver/spi_master.h"
+#include "driver/gpio.h"
 
 #include <sys/stat.h>
 #include <sys/unistd.h>
@@ -198,6 +200,83 @@ ESP32::SPIBusDesc bus_ = HAL_ESP32_SDSPI;
 #define HAL_ESP32_SDSPI_MAX_FREQ_KHZ SDMMC_FREQ_PROBING
 #endif
 
+// wait for MISO high before each SD command (ESP-IDF wait_for_miso): 0 up to
+// 40 ms, -1 no wait, 1-127 up to that many ms. The wait is a busy loop that
+// holds the bus: on a bus where MISO does not go high with the card
+// deselected (no pull-up) it lasts the whole timeout before every command
+#ifndef HAL_ESP32_SDSPI_WAIT_FOR_MISO
+#define HAL_ESP32_SDSPI_WAIT_FOR_MISO 0
+#endif
+
+static uint8_t sdspi_xfer(spi_device_handle_t dev, uint8_t tx)
+{
+    spi_transaction_t t {};
+    t.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
+    t.length = 8;
+    t.tx_data[0] = tx;
+    if (spi_device_polling_transmit(dev, &t) != ESP_OK) {
+        return 0;
+    }
+    return t.rx_data[0];
+}
+
+// clock the card until it releases the busy signal (two consecutive non-zero
+// bytes) or for timeout_ms
+static void sdspi_wait_ready(spi_device_handle_t dev, uint32_t timeout_ms)
+{
+    const uint64_t t0 = AP_HAL::micros64();
+    uint8_t ready = 0;
+    while (ready < 2 && AP_HAL::micros64() - t0 < timeout_ms * 1000ULL) {
+        ready = sdspi_xfer(dev, 0xFF) != 0 ? ready + 1 : 0;
+    }
+}
+
+/*
+  A reset of the chip in the middle of a write leaves the card inside it:
+  waiting for the rest of a data block, or for the next block of a
+  multi-block write. It ignores CMD0 and stays unusable until a power cycle,
+  which a soldered card gets only with the whole board. Before the card is
+  identified, clock it out of the write: wait while it is busy, complete a
+  data block left half sent (the card rejects it: its CRC is wrong, and CRC
+  checks are on in SPI mode), end a multi-block write with the stop token.
+  A card that is not in a write ignores all of this
+ */
+static void sdspi_recover_card()
+{
+    spi_device_interface_config_t cfg {};
+    cfg.mode = 0;
+    cfg.clock_speed_hz = 400 * 1000;
+    cfg.spics_io_num = -1;
+    cfg.queue_size = 1;
+    spi_device_handle_t dev;
+    if (spi_bus_add_device(bus_.host, &cfg, &dev) != ESP_OK) {
+        return;
+    }
+    if (spi_device_acquire_bus(dev, portMAX_DELAY) != ESP_OK) {
+        spi_bus_remove_device(dev);
+        return;
+    }
+    gpio_set_direction(bus_.cs, GPIO_MODE_OUTPUT);
+    gpio_set_level(bus_.cs, 0);
+    // a card in SPI mode busy programming; one not in SPI mode (after power
+    // on) does not drive MISO, which then reads as busy: a short timeout
+    sdspi_wait_ready(dev, 250);
+    // rest of a data block: up to 512 bytes, its CRC and the data response
+    for (uint16_t i = 0; i < 512 + 2 + 8; i++) {
+        sdspi_xfer(dev, 0xFF);
+    }
+    sdspi_wait_ready(dev, 250);
+    // stop token of a multi-block write, then the card is busy while it
+    // programs what it received
+    sdspi_xfer(dev, 0xFD);
+    sdspi_xfer(dev, 0xFF);
+    sdspi_wait_ready(dev, 250);
+    gpio_set_level(bus_.cs, 1);
+    sdspi_xfer(dev, 0xFF);
+    spi_device_release_bus(dev);
+    spi_bus_remove_device(dev);
+}
+
 void mount_sdcard_spi()
 {
 
@@ -239,9 +318,12 @@ void mount_sdcard_spi()
         return;
     }
 
+    sdspi_recover_card();
+
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
     slot_config.gpio_cs = bus_.cs;
     slot_config.host_id = bus_.host;
+    slot_config.wait_for_miso = HAL_ESP32_SDSPI_WAIT_FOR_MISO;
 
     //host.flags = SDMMC_HOST_FLAG_1BIT | SDMMC_HOST_FLAG_DDR;
     host.max_freq_khz = HAL_ESP32_SDSPI_MAX_FREQ_KHZ;
