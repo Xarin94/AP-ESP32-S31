@@ -66,5 +66,15 @@ public:
 
     // set modification time on a file
     bool set_mtime(const char *filename, const uint32_t mtime_sec) override;
+
+    // format the SD card.  This is async, monitor get_format_status for progress
+    bool format(void) override;
+    AP_Filesystem_Backend::FormatStatus get_format_status() const override;
+
+private:
+    void format_handler(void);
+    bool formatting(void) const;
+    FormatStatus format_status;
+    HAL_Semaphore fs_sem;
 };
 
