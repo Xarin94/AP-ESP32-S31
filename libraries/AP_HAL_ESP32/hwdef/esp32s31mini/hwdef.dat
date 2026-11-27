@@ -79,10 +79,9 @@ define HAL_ESP32_SDSPI_WAIT_FOR_MISO -1
 define AP_FILESYSTEM_ESP32_ENABLED 1
 define HAL_LOGGING_BACKENDS_DEFAULT 1
 define HAL_LOGGING_STACK_SIZE 4096
-# log written in 32 kB blocks with an fsync after each (about 1 s of log at
-# LOG_BITMASK 65535), from a 48 kB buffer
-define HAL_ESP32_FS_IO_SIZE 32768
-define HAL_ESP32_FS_FSYNC_SIZE 32768
+# log written in 4 kB blocks with an fsync after each (the ESP32 default,
+# HAL_ESP32_FS_IO_SIZE): a power loss costs little log. The 48 kB buffer
+# absorbs the slow writes of the card
 define HAL_LOGGING_FILE_BUFSIZE 48
 # old logs are deleted at boot to keep this much free: the ArduPilot default,
 # 500 MB, is more than the 480 MB card (every log deleted at each boot);
