@@ -29,6 +29,8 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #include "esp_vfs_fat.h"
+#include "diskio_impl.h"
+#include "diskio_sdmmc.h"
 #pragma pop_macro("MAX")
 #pragma pop_macro("MIN")
 #include "esp_ota_ops.h"
@@ -188,6 +190,11 @@ void mount_sdcard()
     mount_sdcard_mmc();
 }
 
+bool format_sdcard()
+{
+    return false;
+}
+
 #endif // emd mmc
 
 
@@ -207,6 +214,14 @@ ESP32::SPIBusDesc bus_ = HAL_ESP32_SDSPI;
 #ifndef HAL_ESP32_SDSPI_WAIT_FOR_MISO
 #define HAL_ESP32_SDSPI_WAIT_FOR_MISO 0
 #endif
+
+// cluster size of a format: 32 kB, one log write on the boards with
+// HAL_ESP32_FS_IO_SIZE 32768 (a 64 GB card gets 2M clusters, two 8 MB FATs)
+static const esp_vfs_fat_mount_config_t sdspi_mount_config = {
+    .format_if_mount_failed = false,
+    .max_files = 5,
+    .allocation_unit_size = 32 * 1024
+};
 
 static uint8_t sdspi_xfer(spi_device_handle_t dev, uint8_t tx)
 {
@@ -277,6 +292,15 @@ static void sdspi_recover_card()
     spi_bus_remove_device(dev);
 }
 
+static sdspi_device_config_t sdspi_slot_config()
+{
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.gpio_cs = bus_.cs;
+    slot_config.host_id = bus_.host;
+    slot_config.wait_for_miso = HAL_ESP32_SDSPI_WAIT_FOR_MISO;
+    return slot_config;
+}
+
 void mount_sdcard_spi()
 {
 
@@ -294,11 +318,7 @@ void mount_sdcard_spi()
 
     static const char *TAG = "SD...";
     ESP_LOGI(TAG, "Initializing SD card as SDSPI");
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024
-    };
+    esp_vfs_fat_mount_config_t mount_config = sdspi_mount_config;
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
     host.slot = bus_.host;
@@ -320,10 +340,7 @@ void mount_sdcard_spi()
 
     sdspi_recover_card();
 
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = bus_.cs;
-    slot_config.host_id = bus_.host;
-    slot_config.wait_for_miso = HAL_ESP32_SDSPI_WAIT_FOR_MISO;
+    const sdspi_device_config_t slot_config = sdspi_slot_config();
 
     //host.flags = SDMMC_HOST_FLAG_1BIT | SDMMC_HOST_FLAG_DDR;
     host.max_freq_khz = HAL_ESP32_SDSPI_MAX_FREQ_KHZ;
@@ -347,6 +364,81 @@ void mount_sdcard()
     mount_sdcard_spi();
 }
 
+/*
+  partition and format a card that is not mounted: one MBR partition over
+  the whole card, then a FAT volume. The card gets a FatFs drive of its own
+  and no /SDCARD path meanwhile. The ESP-IDF format_if_mount_failed keeps
+  the path on the unmounted volume during the format: a logger open went
+  into it, and the mount after the format reset the board
+ */
+static bool sdspi_format_unmounted()
+{
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.max_freq_khz = HAL_ESP32_SDSPI_MAX_FREQ_KHZ;
+    const sdspi_device_config_t slot_config = sdspi_slot_config();
+    sdspi_dev_handle_t handle;
+    if (host.init() != ESP_OK ||
+        sdspi_host_init_device(&slot_config, &handle) != ESP_OK) {
+        return false;
+    }
+    host.slot = handle;
+    const UINT work_size = 4096;
+    void *work = ff_memalloc(work_size);
+    sdmmc_card_t *c = (sdmmc_card_t *)calloc(1, sizeof(sdmmc_card_t));
+    BYTE pdrv;
+    bool ok = false;
+    if (work != nullptr && c != nullptr && sdmmc_card_init(&host, c) == ESP_OK) {
+        if (ff_diskio_get_drive(&pdrv) == ESP_OK) {
+            ff_diskio_register_sdmmc(pdrv, c);
+            const LBA_t ptbl[4] = {100, 0, 0, 0};
+            const MKFS_PARM opt = {FM_ANY, 2, 0, 0, (DWORD)sdspi_mount_config.allocation_unit_size};
+            const char drv[3] = {char('0' + pdrv), ':', 0};
+            ok = f_fdisk(pdrv, ptbl, work) == FR_OK &&
+                 f_mkfs(drv, &opt, work, work_size) == FR_OK;
+            ff_diskio_unregister(pdrv);
+        }
+        sdmmc_card_deinit(c);
+    }
+    free(c);
+    free(work);
+    sdspi_host_remove_device(handle);
+    return ok;
+}
+
+/*
+  format the card as FAT (FAT32 on a card larger than a few hundred MB).
+  The ESP-IDF FatFs is built without exFAT (FF_FS_EXFAT 0): a card sold as
+  exFAT (SDXC, 64 GB and more) mounts only after this. Blocking, tens of
+  seconds on a large card: run it from the IO thread, with no other thread
+  in the filesystem
+ */
+bool format_sdcard()
+{
+    WITH_SEMAPHORE(sem);
+    if (!sdcard_running) {
+        const bool ok = sdspi_format_unmounted();
+        mount_sdcard_spi();
+        return ok && sdcard_running;
+    }
+    // the open files stay open on the old volume, their calls fail
+    esp_vfs_fat_mount_config_t cfg = sdspi_mount_config;
+    if (esp_vfs_fat_sdcard_format_cfg("/SDCARD", card, &cfg) != ESP_OK) {
+        // the volume is left unmounted, the card still registered
+        unmount_sdcard();
+        return false;
+    }
+    uint64_t total_bytes, free_bytes;
+    if (esp_vfs_fat_info("/SDCARD", &total_bytes, &free_bytes) != ESP_OK) {
+        // the mount after the format failed: ESP-IDF has released the card
+        card = nullptr;
+        sdcard_running = false;
+        return false;
+    }
+    mkdir("/SDCARD/APM", 0777);
+    mkdir("/SDCARD/APM/LOGS", 0777);
+    return true;
+}
+
 #endif // end spi
 
 bool sdcard_retry(void)
@@ -361,6 +453,7 @@ void unmount_sdcard()
 {
     if (card != nullptr) {
         esp_vfs_fat_sdcard_unmount( "/SDCARD", card);
+        card = nullptr;
     }
     sdcard_running = false;
 }
@@ -377,6 +470,10 @@ void unmount_sdcard()
 bool sdcard_retry(void)
 {
     return true;
+}
+bool format_sdcard()
+{
+    return false;
 }
 #endif
 

@@ -18,3 +18,5 @@
 void mount_sdcard();
 void unmount_sdcard();
 bool sdcard_retry();
+// format the card and mount it; blocking, false on failure
+bool format_sdcard();
