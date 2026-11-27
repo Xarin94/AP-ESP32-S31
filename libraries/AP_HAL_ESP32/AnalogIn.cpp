@@ -28,6 +28,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "soc/adc_channel.h"
+#include "soc/soc_caps.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -75,7 +76,21 @@ const AnalogIn::pin_info AnalogIn::pin_config[] = {HAL_ESP32_ADC_PINS};
 #define DEFAULT_VREF    3300         //Use adc2_vref_to_gpio() to obtain a better estimate
 #define NO_OF_SAMPLES   256          //Multisampling
 
+#if SOC_ADC_DIFF_SUPPORTED
+/*
+  ESP32-S31: one input range, 17-bit output, no calibration scheme in
+  ESP-IDF 6.1. A single-ended read gives codes 0..4393 for -2..+2 V, 0 V
+  at mid-scale, and the code of an N-side input (even channel) is
+  inverted (ESP-IDF ADC oneshot documentation and test_apps)
+ */
+static const adc_atten_t atten = ADC_ATTEN_DB_0;
+static const adc_bitwidth_t bitwidth = ADC_BITWIDTH_DEFAULT;
+#define ADC_DIFF_FULL_CODE 4393
+#define ADC_DIFF_FULL_VOLTS 4.0f
+#else
 static const adc_atten_t atten = ADC_ATTEN_DB_12;
+static const adc_bitwidth_t bitwidth = ADC_BITWIDTH_12;
+#endif
 
 /*---------------------------------------------------------------
         ADC Calibration
@@ -274,7 +289,7 @@ bool AnalogSource::adc_init()
 
         adc_oneshot_chan_cfg_t config = {
             .atten = atten,
-            .bitwidth = ADC_BITWIDTH_12
+            .bitwidth = bitwidth
         };
         if (ESP_OK != adc_oneshot_config_channel(g_adc1_handle, _adc_channel, &config)) {
             Debug("AnalogIn: adc_oneshot_config_channel failed for adc_channel = %d\n", _adc_channel);
@@ -315,7 +330,13 @@ float AnalogSource::adc_read()
         }
     }
     else {
+#if SOC_ADC_DIFF_SUPPORTED
+        const float half = ADC_DIFF_FULL_CODE * 0.5f;
+        const float code = (_adc_channel & 1U) ? (raw - half) : (half - raw);
+        return MAX(code, 0.0f) * (ADC_DIFF_FULL_VOLTS / ADC_DIFF_FULL_CODE);
+#else
         value = raw * VOLTAGE_SCALING;
+#endif
     }
     return (float)value / 1000;
 }

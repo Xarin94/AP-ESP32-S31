@@ -270,6 +270,7 @@ Build:
 
 ESP32 HAL on ESP-IDF 6.1:
 - `CANIface` (new): CAN on TWAI with the `esp_twai` node driver; RX through a FreeRTOS queue from the ISR, TX slots, loopback for the DroneCAN time sync, bus-off recovery at 1 Hz.
+- `AnalogIn`: on the S31 (differential SAR ADC), one input range, 17-bit codes and the nominal code-to-voltage scale, inverted on an N-side input.
 - `UARTDriver`: `USB_SERIAL_JTAG` port; RX/TX swap and inversion with `SERIALn_OPTIONS`, parity and stop bits; the console moves to the USB Serial/JTAG driver when SERIAL0 opens.
 - Console on the USB Serial/JTAG (`sdkconfig.defaults`): UART0 is SERIAL4.
 - `Scheduler`, `DeviceBus`, `WiFi*`: cores set from the hwdef, bus and library threads with a fixed affinity.
