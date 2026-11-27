@@ -23,7 +23,7 @@ Run `./waf configure` again after every change to `hwdef.dat`. The images are in
 
 ## Prebuilt firmware
 
-[`firmware/plane`](firmware/plane) and [`firmware/rover`](firmware/rover) hold the ready-to-flash images of release 0.0.2 (tag `v0.0.2`, ArduPlane / ArduRover V4.8.0-dev, ESP-IDF v6.1, flash in QIO): `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. ArduPlane was tested on the board, ArduRover is built from the same code but was not started on the board. They are not rebuilt automatically: a later commit may change the code without changing them. They are built for the V1.2 pinout and do not match the V1.5 (IMU bus, compass chip select, GPS serial, CAN, SERVO7-8): on a V1.5 board build the firmware from the sources. The images of release 0.0.1 (tag `v0.0.1`, [GitHub release](https://github.com/Xarin94/AP-ESP32-S31/releases/tag/v0.0.1)) read the flash in DIO: with a GPS fix and EKF3 using it they hold the main loop at about 177 Hz instead of 200.
+[`firmware/plane`](firmware/plane), [`firmware/copter`](firmware/copter) and [`firmware/rover`](firmware/rover) hold the ready-to-flash images of release 0.0.3 (tag `v0.0.3`, [GitHub release](https://github.com/Xarin94/AP-ESP32-S31/releases/tag/v0.0.3), ArduPlane / ArduCopter / ArduRover V4.8.0-dev, ESP-IDF v6.1, flash in QIO), built for the V1.5 pinout: `bootloader.bin` at 0x2000, `partition-table.bin` at 0x10000, `ardupilot.bin` at 0x20000, and their `SHA256SUMS`. Flash them as below, from inside the directory and with the file names without their build subdirectories. ArduPlane was tested on the board, ArduCopter and ArduRover are built from the same code but were not started on the board. They are not rebuilt automatically: a later commit may change the code without changing them. They do not match the V1.2 pinout (IMU bus, compass chip select, GPS serial, CAN, SERVO7-8): for a V1.2 board use the images of release 0.0.2 (tag `v0.0.2`); the V1.4 has its own board, `esp32s31mini14`, built from the sources. The images of release 0.0.1 (tag `v0.0.1`, [GitHub release](https://github.com/Xarin94/AP-ESP32-S31/releases/tag/v0.0.1)) read the flash in DIO: with a GPS fix and EKF3 using it they hold the main loop at about 177 Hz instead of 200.
 
 ## Flashing
 
@@ -155,7 +155,7 @@ New driver `AP_Airspeed_ELVH`: All Sensors ELVH differential pressure sensors wi
 
 ### SD card and logs
 
-The SD memory is soldered on the board and works in SPI mode on SPI bus 2, with the sensors; on the bench board it is an SD NAND that identifies itself as `APPSD`, SDSC, 480 MB, and runs at 20 MHz. ArduPilot does not format it: it needs a FAT filesystem. The IO thread mounts it at boot and, while disarmed, retries every 3 s; the logs go to `/SDCARD/APM/LOGS` (`LOG_BACKEND_TYPE 1`, the default) and are written from arming (`LOG_DISARMED 0`). Over MAVFTP the paths are the same, starting from `/SDCARD`. The SD pins stay the same on the later board versions.
+The SD memory is soldered on the board and works in SPI mode on SPI bus 2, with the sensors; on the bench board it is an SD NAND that identifies itself as `APPSD`, SDSC, 480 MB, and runs at 20 MHz. A microSD card in a socket adapter on the same pads works as well (checked with a 64 GB card). The card needs a FAT filesystem: the ESP-IDF FatFs is built without exFAT, so a card sold as exFAT (SDXC, 64 GB and more) does not mount (`vfs_fat_sdmmc: failed to mount card (13)` on the USB console). `MAV_CMD_STORAGE_FORMAT` (the SD card format of the GCS, disarmed only) partitions it with one MBR partition and formats it FAT32 with 32 kB clusters, in about 21 s for 64 GB; the logger and the other filesystem users get `EBUSY` meanwhile. The IO thread mounts it at boot and, while disarmed, retries every 3 s; the logs go to `/SDCARD/APM/LOGS` (`LOG_BACKEND_TYPE 1`, the default) and are written from arming (`LOG_DISARMED 0`). Over MAVFTP the paths are the same, starting from `/SDCARD`. The SD pins stay the same on the later board versions.
 
 The log writer runs in a low priority thread and writes from a RAM buffer of 48 kB (`LOG_FILE_BUFSIZE`, default from `HAL_LOGGING_FILE_BUFSIZE`), in blocks of 32 kB with an fsync after each (`HAL_ESP32_FS_IO_SIZE`, `HAL_ESP32_FS_FSYNC_SIZE`; about 1 s of log at `LOG_BITMASK 65535`, the longest a power loss can cost). The ESP32 default, 4 kB writes each with an fsync that rewrites the FAT and the directory entry, does not keep up. The SD driver is a copy of the ESP-IDF one (`targets/esp32s31/esp-idf/components/esp_driver_sdspi`): while the card is busy writing it deselects the card, releases the bus to the baros, the compass and the airspeed sensor and sleeps, instead of holding the bus and polling. MISO does not go high with the card deselected, so the ESP-IDF wait for MISO high before every command (a 40 ms busy loop holding the bus) is off (`HAL_ESP32_SDSPI_WAIT_FOR_MISO -1`). Old logs are deleted at boot to keep `LOG_FILE_MB_FREE` free: the ArduPilot default, 500 MB, is more than the card, and deleted every log at each boot; the board default is 128 MB (`HAL_LOGGER_MIN_MB_FREE`), about an hour of log at `LOG_BITMASK 65535`. The LP core reports the gaps of the bus thread (channel `SPI1`, see [LP core](#lp-core-supervisor-watchdog-and-diagnostics)). If the card does not mount or the log has write errors, lower `HAL_ESP32_SDSPI_MAX_FREQ_KHZ`.
 
@@ -253,7 +253,7 @@ ESP32 HAL on ESP-IDF 6.1:
 - `SPIDevice`: short transfers (≤ 64 bytes) polled; all CS driven high before any bus setup; stop at boot when an SPI host has no room for a device.
 - `Util`: load of each core from the FreeRTOS idle time; LP core results in `@SYS/threads.txt`.
 - `LPSupervisor` (new) and the `lp_supervisor` ESP-IDF component (new): supervisor, watchdog and diagnostics of the HP threads on the LP core; `Scheduler`: heartbeats of the HAL threads, `expect_delay_ms()` and `in_expected_delay()`; `DeviceBus`: heartbeat of the bus threads.
-- `SdCard`: SD card in SPI mode on a host shared with the sensors, host and DMA channel from the `ESP32_SDSPI` line, clock from `HAL_ESP32_SDSPI_MAX_FREQ_KHZ`, wait for MISO high before each command from `HAL_ESP32_SDSPI_WAIT_FOR_MISO`; before the mount, recovery of a card left in a write by a reset.
+- `SdCard`: SD card in SPI mode on a host shared with the sensors, host and DMA channel from the `ESP32_SDSPI` line, clock from `HAL_ESP32_SDSPI_MAX_FREQ_KHZ`, wait for MISO high before each command from `HAL_ESP32_SDSPI_WAIT_FOR_MISO`; before the mount, recovery of a card left in a write by a reset; `format_sdcard()`: FAT format of the card, mounted or not (FatFs `f_fdisk`/`f_mkfs` on a drive of its own when it has no FAT volume).
 - `esp_driver_sdspi` ESP-IDF component, copied in `targets/esp32s31/esp-idf/components/` and registered after the ESP-IDF ones, so it replaces theirs: while the card is busy after a write it is deselected, the bus released and the task sleeps.
 - `HAL_ESP32_Class.cpp`: a fourth `ESP32_SERIAL` line is SERIAL4.
 - `Semaphores`: waits rounded up to the next tick.
@@ -266,6 +266,7 @@ Drivers and libraries:
 - `AP_Airspeed_ELVH` (new, `ARSPD_TYPE 21`, `ARSPD_ELVH_RNG`), with the simulated sensor in SITL and the case in `AirspeedDrivers`.
 - `AP_Baro_BMP581`: soft reset before the power-on check, so the baro starts after a reboot without a power cycle.
 - `AP_Filesystem_ESP32`, `AP_Logger_File`: log write size and fsync interval from the hwdef (`HAL_ESP32_FS_IO_SIZE`, `HAL_ESP32_FS_FSYNC_SIZE`, default 4 kB as before).
+- `AP_Filesystem_ESP32`: SD card format (`MAV_CMD_STORAGE_FORMAT`, `format()`), run in the IO thread; every call holds a semaphore that the format takes, and fails with `EBUSY` while a format is pending or running (`close` and `closedir` wait).
 - `AP_Notify`: `AP_BoardLED_InitGPS`, the two status LEDs.
 - `GCS_MAVLink`: `SYS_STATUS.load` from the core load when the HAL measures it, `NAMED_VALUE_FLOAT` `CPU0`/`CPU1`.
 - `AP_HAL::Scheduler::heartbeat()`: heartbeat of long-running library threads, for a HAL that watches its threads from outside; does nothing elsewhere.
@@ -293,13 +294,19 @@ V1.5 board, checked on 2026-11-17 with ArduPlane, at rest and disarmed, without 
 - LP core running, watchdog armed at 2000 ms, all 11 channels reporting (`MAIN`, `TIMR`, `UART`, `RCIN`, `RCOU`, `IO`, `STOR`, `IDL0`, `IDL1`, `SPI0`, `SPI1`), LP tick at most 29 µs out of 1000, no late ticks, no stalls 16 s after the start (longest gaps: 11 ms `SPI1`, 8 ms `MAIN`). The first boot after flashing reported `LP supervisor skipped: last start incomplete`: the start guard found in NVS the flag of an earlier start that did not reach 10 s, and the next boot started the LP core;
 - RM3100 not detected: `No Compass backends available` and `PreArm: Compass 1 not healthy`.
 
+Release 0.0.3, checked on the V1.5 board with ArduPlane on 2026-11-27, at rest and disarmed, with the log running (`LOG_DISARMED 1`, `LOG_BITMASK 65535`):
+- the ArduPlane images of the release flashed as in [Flashing](#flashing): SCH16T, both BMP581, ELVH and RM3100 (`COMPASS_DEV_ID` 0x11020A) healthy;
+- a 64 GB microSD in a socket adapter, sold exFAT, did not mount; `MAV_CMD_STORAGE_FORMAT` formatted it FAT32 in 21 s without a reset; after a reboot it mounted and the logs were written;
+- Septentrio mosaic-X5 on S1 (`SERIAL4_BAUD 115`, `GPS2_TYPE 10`, `GPS2_COM_PORT 2`, SBF output of its COM2 saved on the receiver, `GPS_AUTO_CONFIG 0`): detected at boot, 3D fix with 16 satellites. After a restart of the receiver on the bench, 9–12 satellites and a horizontal accuracy of 14 m, more than the 5 m EKF3 accepts: EKF3 stayed in constant position mode;
+- with the GPS fix and the log running, no "Main loop slow" at `SCHED_LOOP_RATE` 200: core 0 at 70–72%, core 1 at 39–41%.
+
 Still to check:
 1. EKF3 with GPS and compass in motion and in flight;
 2. IMU variant and rotation, compass rotation, calibrations;
 3. PWM signals on SERVO1-8 (IO42-IO47, IO54, IO55), telemetry on S2;
 4. ELVH on a board where it is connected: `DiffPress` close to 0 with the pitot covered and a plausible `Temp`;
-5. ArduRover on the board.
-6. V1.5: the RM3100 on IO2, not detected; GPS on SERIAL3 (IO3/IO4); a DroneCAN node seen by the GCS; telemetry over Wi-Fi; LEDs.
+5. ArduCopter and ArduRover on the board.
+6. V1.5: GPS on SERIAL3 (IO3/IO4); a DroneCAN node seen by the GCS; telemetry over Wi-Fi; LEDs.
 7. SD memory: a log written when armed; `BARO` and `MAG` sample intervals while logging, with GPS and EKF3.
 8. LP core: a main loop stall reported to the GCS (`MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN` 42/24/71/97, a 250 ms loop); the reboot of the LP watchdog (42/24/71/93, a main loop lockup) and its post-mortem in `@SYS/threads.txt`, on the GCS and in `LPPM`.
 9. `HAL_ESP32_LP_PC_SAMPLING 1` alone, with the board at hand.
