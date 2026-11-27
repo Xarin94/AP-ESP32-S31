@@ -201,7 +201,18 @@ Arming, pre-arm and calibration states are shown by the GCS.
 
 The main loop runs at 200 Hz (`SCHED_LOOP_RATE` in `defaults.parm`). Measured on the V1.2 (one SPI bus for all the sensors, no log, no CAN) with ArduPlane, a GPS fix with EKF3 using it and the live FFT on (`INS_FFT_LIVE 1`): core 0 at 61%, core 1 at 35%, scheduler load 61%. The code runs from the flash through a 16 kB instruction cache, so the flash mode counts: in DIO, the same load took core 0 to 88% and held the loop at 177 Hz ("Main loop slow"), while without the GPS fix it stayed at 200 Hz; compiling for speed (`-O2`) instead of size made no difference. Without a GPS fix the main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
 
-The V1.5 adds the second SPI bus thread, the log writer and DroneCAN on core 1, and the log messages on the main loop. On the bench, with ArduPlane at rest, disarmed, without a GPS fix and without a log running, the main loop holds 200 Hz and `SYS_STATUS.load` reads 46–47%; with the log on (`LOG_DISARMED 1`, `LOG_BITMASK 65535`) core 0 is at 49% and core 1 at 40%, as without it. With GPS and EKF3 it has not been measured yet.
+The V1.5 adds the second SPI bus thread, the log writer and DroneCAN on core 1, and the log messages on the main loop. On the bench, with ArduPlane at rest, disarmed, without a GPS fix and without a log running, the main loop holds 200 Hz and `SYS_STATUS.load` reads 46–47%; with the log on (`LOG_DISARMED 1`, `LOG_BITMASK 65535`) core 0 is at 49% and core 1 at 40%, as without it.
+
+With a GPS (Septentrio mosaic-X5 on S1, SBF at 10 Hz), measured on 2026-11-27 with the ArduPlane images of release 0.0.3, at rest and disarmed, live FFT off (`INS_FFT_LIVE 0`), from `NAMED_VALUE_FLOAT` `CPU0`/`CPU1` over 60–90 s; the first two rows are the measurements above, without GPS:
+
+| State | Core 0 | Core 1 |
+|---|---|---|
+| no GPS fix, log off (2026-11-17, `SYS_STATUS.load`) | 46–47% | – |
+| no GPS fix, log on (2026-11-26) | 49% | 40% |
+| 3D fix, EKF3 started, not yet using the GPS (constant position mode), log on | 70–72% | 39–41% |
+| 3D fix, EKF3 using the GPS, log off | 67–70% (mean 68.5%) | 39–40% |
+
+With the fix EKF3 starts and core 0 goes up by about 20 points; core 1 does not change. No "Main loop slow" in any of these states. With EKF3 using the GPS and the log on it has not been measured.
 
 Set from the hwdef: `HAL_ESP32_FASTCPU`, `HAL_ESP32_SLOWCPU`, `HAL_ESP32_DEVICE_BUS_CPU`, `HAL_ESP32_THREAD_CPU` (and `HAL_ESP32_CAN_THREAD_CPU`, `HAL_ESP32_IO_THREAD_CPU`). The load is sent in telemetry: `SYS_STATUS.load` is the busiest core, measured from the FreeRTOS idle time; `NAMED_VALUE_FLOAT` `CPU0` and `CPU1` give each core in %.
 
@@ -296,9 +307,9 @@ V1.5 board, checked on 2026-11-17 with ArduPlane, at rest and disarmed, without 
 
 Release 0.0.3, checked on the V1.5 board with ArduPlane on 2026-11-27, at rest and disarmed, with the log running (`LOG_DISARMED 1`, `LOG_BITMASK 65535`):
 - the ArduPlane images of the release flashed as in [Flashing](#flashing): SCH16T, both BMP581, ELVH and RM3100 (`COMPASS_DEV_ID` 0x11020A) healthy;
-- a 64 GB microSD in a socket adapter, sold exFAT, did not mount; `MAV_CMD_STORAGE_FORMAT` formatted it FAT32 in 21 s without a reset; after a reboot it mounted and the logs were written;
-- Septentrio mosaic-X5 on S1 (`SERIAL4_BAUD 115`, `GPS2_TYPE 10`, `GPS2_COM_PORT 2`, SBF output of its COM2 saved on the receiver, `GPS_AUTO_CONFIG 0`): detected at boot, 3D fix with 16 satellites. After a restart of the receiver on the bench, 9–12 satellites and a horizontal accuracy of 14 m, more than the 5 m EKF3 accepts: EKF3 stayed in constant position mode;
-- with the GPS fix and the log running, no "Main loop slow" at `SCHED_LOOP_RATE` 200: core 0 at 70–72%, core 1 at 39–41%.
+- a 64 GB microSD in a socket adapter, sold exFAT, did not mount; `MAV_CMD_STORAGE_FORMAT` formatted it FAT32 in 21 s without a reset; after a reboot it mounted and the logs were written. The release image formatted it again in 22 s (`Format: OK`, no logs left);
+- Septentrio mosaic-X5 on S1 (`SERIAL4_BAUD 115`, `GPS2_TYPE 10`, `GPS2_COM_PORT 2`, SBF output of its COM2 saved on the receiver, `GPS_AUTO_CONFIG 0`): detected at boot, 3D fix with 16 satellites. After a restart of the receiver EKF3 stayed in constant position mode for the first minutes of the fix (9–12 satellites, horizontal accuracy 14 m), then used the GPS for horizontal and vertical position (16 satellites);
+- no "Main loop slow" at `SCHED_LOOP_RATE` 200, with the GPS fix and EKF3, with or without the log: core 0 at 67–72%, core 1 at 39–41% (see [Use of the two cores](#use-of-the-two-cores)).
 
 Still to check:
 1. EKF3 with GPS and compass in motion and in flight;
