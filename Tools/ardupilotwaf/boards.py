@@ -1128,13 +1128,24 @@ class esp32(Board):
 
     def __init__(self):
         super().__init__()
-        # DroneCAN is built for boards that declare TWAI interfaces
-        self.with_can = False
+        # DroneCAN is built for boards that declare TWAI interfaces, also
+        # in a hwdef they include
         hwdef = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../libraries/AP_HAL_ESP32/hwdef',
                              self.get_name(), 'hwdef.dat')
-        if os.path.exists(hwdef):
-            with open(hwdef) as f:
-                self.with_can = any(line.split()[:1] == ['ESP32_CAN'] for line in f)
+        self.with_can = self.hwdef_has_can(hwdef)
+
+    def hwdef_has_can(self, hwdef):
+        if not os.path.exists(hwdef):
+            return False
+        with open(hwdef) as f:
+            for line in f:
+                a = line.split('#')[0].split()
+                if a[:1] == ['ESP32_CAN']:
+                    return True
+                if len(a) > 1 and a[0] == 'include':
+                    if self.hwdef_has_can(os.path.join(os.path.dirname(hwdef), a[1])):
+                        return True
+        return False
 
     def configure_env(self, cfg, env):
         env.BOARD_CLASS = "ESP32"
