@@ -1,6 +1,6 @@
-# MINI AHRS board V1.4 (ESP32-S31), without RM3100, SD card and ELVH
-# 400 Hz main loop: with the code running from the PSRAM (sdkconfig.defaults)
-# core 0 is at about 41% at 400 Hz
+# MINI AHRS board V1.4 (ESP32-S31): V1.5 hardware with the DAN-F10N on S3
+# 400 Hz main loop: with the code running from the PSRAM (target
+# sdkconfig.defaults) core 0 is at about 41% at 400 Hz
 SCHED_LOOP_RATE 400
 # DAN-F10N on SERIAL3 (IO3/IO4): the driver finds its baud rate and
 # configures it (UBX at 230400)

@@ -1,12 +1,12 @@
 # MINI AHRS V1.4 and V1.5: pinout
 
-Both boards carry the ESP32-S31-WROOM-1-N16R16V module (16 MB flash, 16 MB octal PSRAM) and run the same ArduPilot port:
+Both boards carry the ESP32-S31-WROOM-1-N16R16V module (16 MB flash, 16 MB octal PSRAM) and run the same ArduPilot port. From the V1.4 on the boards share the pinout and the software: the V1.4 differs only by the u-blox DAN-F10N GPS on the board, wired to S3, with its TIMEPULSE on IO5. `esp32s31mini14/hwdef.dat` includes the V1.5 hwdef and changes only the board name; `defaults.parm` sets up the DAN-F10N.
 
 | Board | hwdef | Notes |
 |---|---|---|
 | V1.2 | `esp32s31mini` up to tag `v0.0.2` | one SPI bus for every sensor, no PWM on the schematic pins |
-| V1.4 | `esp32s31mini14` (this directory) | u-blox DAN-F10N GPS on the board, code run from the PSRAM |
-| V1.5 | [`esp32s31mini`](../esp32s31mini/README.md) | SD memory, RM3100 chip select on IO2 |
+| V1.4 | `esp32s31mini14` (this directory) | u-blox DAN-F10N GPS on the board, on S3 |
+| V1.5 | [`esp32s31mini`](../esp32s31mini/README.md) | GPS on connector S3 |
 
 ## Module pads 42-53
 
@@ -18,7 +18,7 @@ On the V1.2 the module pads 42-53 were found not to be on the GPIO named by the 
 | 46 / 47 | IO12 / IO13 | UART2 RX / TX (connector S2, U7) | IO10 / IO11 (measured) |
 | 48 / 49 | IO14 / IO15 | LED1 / LED2 | IO13 / IO12 (measured) |
 | 42 / 43 | IO8 / IO9 | CANRX / CANTX on the V1.4 schematic | none: the V1.4 CAN is on IO56 / IO57, as on the V1.5 |
-| 52 | IO18 | `CSmag` on the V1.4 | unknown: on the V1.2 this pad is not IO18 |
+| 52 | IO18 | `CSmag` on the V1.4 schematic | none: `CSmag` is IO2 on the V1.4, as on the V1.5 |
 
 ## Pinout
 
@@ -30,18 +30,17 @@ On the V1.2 the module pads 42-53 were found not to be on the GPIO named by the 
 | SCH16T DRY_SYNC | `DR2` | pad 53, not used | no line |
 | SPI bus 2 SCK / MOSI / MISO | `SCK2` / `MOSI2` / `MISO2` | 35 / 36 / 37 | 35 / 36 / 37 |
 | BMP581 #1 / #2 CS | `CSbaro1` / `CSbaro2` | 23 / 24 | 23 / 24 |
-| RM3100 CS | `CSmag` | pad 52 (see above) | 2 |
+| RM3100 CS | `CSmag` | 2 | 2 |
 | ELVH CS | `TOT` | 38 | 38 |
 | SD card CS | `cssd` | 39 | 39 |
 | GPS serial RX / TX (S3) | `rxgps` / `txgps` | 3 / 4, DAN-F10N on the board | 3 / 4 (connector S3) |
-| GPS RESET_N | `GPSrst` | 2 | (IO2 is `CSmag`) |
 | GPS TIMEPULSE | `TP` | 5 | no line |
 | UART1 RX / TX (connector S1) | `UART1RX` / `UART1TX` | 8 / 9 | 8 / 9 |
 | UART2 RX / TX (connector S2) | `UART2RX` / `UART2TX` | 10 / 11 | 10 / 11 |
 | USB D- / D+ | `D-` / `D+` | 33 / 34 | 33 / 34 |
 | CAN TX / RX (MCP2542FD) | `CANTX` / `CANRX` | 57 / 56 | 57 / 56 |
 | SERVO1-6 | `s1`-`s6` | 42-47 | 42-47 |
-| SERVO7 / SERVO8 | `s7` / `s8` | 48 / 49 | 54 / 55 |
+| SERVO7 / SERVO8 | `s7` / `s8` | 54 / 55 | 54 / 55 |
 | LED1 / LED2 | `led1` / `led2` | 13 / 12 | 13 / 12 |
 
 Common to both boards:
@@ -61,22 +60,25 @@ Common to both boards:
 | SERIAL4 | connector S1 (net UART1), ESP32 UART0 | rangefinder at 115200 (`SERIAL4_PROTOCOL 9`) |
 | IMU | SCH16T on SPI bus 1 | `ROTATION_ROLL_180` |
 | Baros | 2x BMP581 on SPI bus 2 | |
+| Compass | RM3100 on SPI bus 2, CS IO2 | `ROTATION_ROLL_180`; off in `defaults.parm` (`COMPASS_ENABLE 0`) |
+| Airspeed | ELVH on SPI bus 2, CS IO38 | ArduPlane only (`ARSPD_TYPE 21`) |
+| SD card | SPI bus 2, CS IO39 | logs in `/SDCARD/APM/LOGS`, as on the V1.5 |
 | CAN1 | TWAI on the MCP2542FD (TX IO57, RX IO56) | DroneCAN, 1 Mbit/s |
 
 S1, S2 and S3 take any serial protocol of ArduPilot (`SERIALn_PROTOCOL`); on the V1.4 S3 is wired to the DAN-F10N. The HAL sets parity, stop bits, RX and TX inversion (`SERIALn_OPTIONS` bits 0 and 1) and the RX/TX swap (bit 3); half-duplex, flow control and the pull options are not supported. SERIAL4 is on the UART0 of the S31, free because the console is on the USB: ESP-IDF 6.1 has no GPIO matrix signals for the UART3 of the S31 (`-1` in `uart_periph.c`), so UART3 is never connected to its pins. A TFmini on S1 needs `RNGFND1_TYPE 20`.
 
-The hwdef is for a V1.4 without RM3100, SD card and ELVH mounted: none of them is configured, and there is no log. IO2 is listed as an SPI chip select that no driver opens, so the HAL drives it high at boot and keeps the GPS out of reset.
+The hwdef includes the V1.5 one (`include ../esp32s31mini/hwdef.dat`) and changes only `HAL_ESP32_BOARD_NAME`: the RM3100, the ELVH, the SD card and the log are configured as on the V1.5, and a software change to the V1.5 hwdef applies to the V1.4 too. Up to 2026-11-27 the V1.4 hwdef left them out (the V1.4 used here had them not mounted), drove IO2 as the GPS reset and had SERVO7/8 on IO48/IO49.
 
-`defaults.parm` sets the board up for an ArduCopter tricopter: `FRAME_CLASS 7` (motors on SERVO1, SERVO2 and SERVO4, tail servo on SERVO7), a 400 Hz main loop, and EKF3 yaw from the GSF (`EK3_SRC1_YAW 8`, `COMPASS_ENABLE 0`), since there is no compass. Without a compass the yaw aligns only after moving with a GPS fix, so the first take-off must be in a mode that does not need a position.
+`defaults.parm` sets the board up for an ArduCopter tricopter: `FRAME_CLASS 7` (motors on SERVO1, SERVO2 and SERVO4, tail servo on SERVO7), a 400 Hz main loop, and EKF3 yaw from the GSF (`EK3_SRC1_YAW 8`, `COMPASS_ENABLE 0`), since the V1.4 used here has no RM3100 mounted. Without a compass the yaw aligns only after moving with a GPS fix, so the first take-off must be in a mode that does not need a position.
 
 CAN: DroneCAN on CAN1 at 1 Mbit/s (`CAN_P1_DRIVER 1`, `CAN_D1_PROTOCOL 1`); the servos stay on PWM. SLCAN works as on the STM32 boards with one USB port: with `CAN_SLCAN_CPORT 1` (read at boot) and `CAN_SLCAN_SERNUM 0` the USB (SERIAL0) becomes an SLCAN adapter on CAN1 until `CAN_SLCAN_TIMOUT` or a reboot, and Mission Planner sets this by itself. The S31 cannot add a second USB CDC for a dedicated SLCAN port: the USB connector (IO33/IO34) is the USB Serial/JTAG, which has one fixed CDC, and the USB OTG of the S31 has only the HS (UTMI) PHY, on other pads. Over MAVLink (USB or Wi-Fi) the CAN bus is also reachable with `MAV_CMD_CAN_FORWARD` ("MAVLink-CAN" in Mission Planner, `mavcan:` in the DroneCAN GUI tool).
 
-Checked on the V1.4 with ArduCopter, at rest and indoors: SCH16T (about -1000 mG on Z at rest, so the K10 variant is right), both BMP581, the DAN-F10N on SERIAL3 in both directions at 10 Hz, the 400 Hz main loop, a TFmini on S1 (SERIAL4), with the RX inversion and the swap. Not checked yet: CAN, the PWM signals, a device on S2, a serial device with parity, the LEDs, a GPS fix and flight.
+Checked on the V1.4 with ArduCopter, at rest and indoors: SCH16T (about -1000 mG on Z at rest, so the K10 variant is right), both BMP581, the DAN-F10N on SERIAL3 in both directions at 10 Hz, the 400 Hz main loop, a TFmini on S1 (SERIAL4), with the RX inversion and the swap. These checks were made with the earlier V1.4 hwdef (no RM3100, ELVH and SD card, SERVO7/8 on IO48/IO49); the current one, which includes the V1.5 hwdef, is built but not yet run on a V1.4. Not checked yet: CAN, the PWM signals, a device on S2, a serial device with parity, the LEDs, a GPS fix and flight.
 
 ## DAN-F10N on the V1.4
 
-- RESET_N (IO2) is active low, with an internal pull-up. Driving it low resets the receiver and clears its configuration.
-- On the DAN-F10N, TIMEPULSE and SAFEBOOT_N are the same internal function, with SAFEBOOT_N tied to TIMEPULSE through 1 kΩ (Integration manual, 3.2.2): if the pin is low when the receiver starts, it enters safeboot mode. IO5 must not be driven low at start-up. To force safeboot for a firmware recovery, hold IO5 low and pulse IO2 low.
+- RESET_N is active low, with an internal pull-up; it is not on a GPIO of the ESP32 (IO2 is only `CSmag`).
+- On the DAN-F10N, TIMEPULSE and SAFEBOOT_N are the same internal function, with SAFEBOOT_N tied to TIMEPULSE through 1 kΩ (Integration manual, 3.2.2): if the pin is low when the receiver starts, it enters safeboot mode. IO5 must not be driven low at start-up. To force safeboot for a firmware recovery, hold IO5 low while the receiver powers up.
 - The ESP32 HAL has no PPS input: the time pulse is not used.
 - V_BCKP is not connected: every power-up is a cold start.
 - The antenna is the patch antenna of the module; EXT_RF_IN is not used.
@@ -95,7 +97,7 @@ The instruction cache of the S31 is 16 kB; with the code in the QIO flash, a lar
 | Core 0 at 400 Hz | does not keep up | 41%, loop at 399.8-400.6 Hz |
 | Core 1 | 36% | 34% |
 
-The PSRAM start-up (detection, timing tuning, copy of the code, memory test) takes about 0.8 s. Flash writes, such as saving parameters, no longer stop the cache of both cores. The V1.5 has the same module but has not been tested with the code in the PSRAM.
+The PSRAM start-up (detection, timing tuning, copy of the code, memory test) takes about 0.8 s. Flash writes, such as saving parameters, no longer stop the cache of both cores. On the V1.5, with ArduPlane, a GPS at 50 Hz and the log on, core 0 went from 73% at 200 Hz (code in flash) to 46% at 400 Hz (code in PSRAM): see [Use of the two cores](../esp32s31mini/README.md#use-of-the-two-cores).
 
 ## Build and flash
 
