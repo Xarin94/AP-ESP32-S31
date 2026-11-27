@@ -112,7 +112,7 @@ The code repeats the filter three times (3 bits per axis): `000` 68 Hz, `001` 30
 
 ### EKF3 noise (SCH16T-K10, RM3100)
 
-EKF3 takes its process noises as the standard deviation per prediction step divided by the step: variance per step = (dt · NSE)². A white noise of density N gives a variance of N² · dt, so NSE = N / √dt. An offset drifting as a random walk of σ over a time T gives NSE = σ / (√T · √dt). The values below are computed with dt = 12 ms (`EKF_TARGET_DT`); with the 200 Hz loop of the board EKF3 predicts every 10 ms (two IMU frames), and with the same parameters the variance per second is 0.83 times the computed one.
+EKF3 takes its process noises as the standard deviation per prediction step divided by the step: variance per step = (dt · NSE)². A white noise of density N gives a variance of N² · dt, so NSE = N / √dt. An offset drifting as a random walk of σ over a time T gives NSE = σ / (√T · √dt). The values below are computed with dt = 12 ms (`EKF_TARGET_DT`); with the 400 Hz loop of the board EKF3 predicts about every 12.5 ms (five IMU frames), so the variance per second is close to the computed one (it was 0.83 times it with the 200 Hz loop, a prediction every 10 ms).
 
 | Parameter | Sensor data | Sensor only | EKF3 default | In `defaults.parm` |
 |---|---|---|---|---|
@@ -199,7 +199,19 @@ Arming, pre-arm and calibration states are shown by the GCS.
 | HP CPU1 | SPI bus threads (SCH16T at 1 kHz on its bus; baros, compass and airspeed on the other; priority 24, above Wi-Fi), Wi-Fi/lwIP, IO (SD mount), storage, RC, library threads (DroneCAN, logger, live FFT), `APM_LPSV` (LP core supervisor) |
 | LP core | supervisor of the HP threads and watchdog of the main loop, see below |
 
-The main loop runs at 200 Hz (`SCHED_LOOP_RATE` in `defaults.parm`). Measured on the V1.2 (one SPI bus for all the sensors, no log, no CAN) with ArduPlane, a GPS fix with EKF3 using it and the live FFT on (`INS_FFT_LIVE 1`): core 0 at 61%, core 1 at 35%, scheduler load 61%. The code runs from the flash through a 16 kB instruction cache, so the flash mode counts: in DIO, the same load took core 0 to 88% and held the loop at 177 Hz ("Main loop slow"), while without the GPS fix it stayed at 200 Hz; compiling for speed (`-O2`) instead of size made no difference. Without a GPS fix the main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
+The main loop runs at 400 Hz (`SCHED_LOOP_RATE` in `defaults.parm`), as on the V1.4. The code and read-only data are copied at start-up from the flash to the 16 MB octal PSRAM of the module and run from there at 200 MHz (`CONFIG_SPIRAM_XIP_FROM_PSRAM` in `targets/esp32s31/esp-idf/sdkconfig.defaults`, the same for both boards); the PSRAM is not added to the heap, so the ArduPilot heap and the DMA buffers stay in internal SRAM. The start-up of the PSRAM takes about 0.8 s, and flash writes (parameters) no longer stop the cache of both cores. Up to release 0.0.3 the code ran from the QIO flash through the 16 kB instruction cache, a large part of core 0 time went into cache refills, and the loop ran at 200 Hz.
+
+Measured on the V1.5 on 2026-11-27 with ArduPlane, at rest and disarmed, the mosaic-X5 on S1 sending SBF at 50 Hz (460800) with a 3D fix, EKF3 started in constant position mode, the log on (`LOG_DISARMED 1`, `LOG_BITMASK 65535`), live FFT off, from `NAMED_VALUE_FLOAT` `CPU0`/`CPU1` and the `PM` log messages:
+
+| Code | `SCHED_LOOP_RATE` | Core 0 | Core 1 | Loop rate (`PM.LR`) |
+|---|---|---|---|---|
+| flash (release 0.0.3), 300 s | 200 | 70–75% (mean 73%) | 38–43% | 192–200 Hz |
+| PSRAM, 90 s | 200 | 29–34% (mean 30.5%) | 37–42% | 200 Hz |
+| PSRAM, 300 s | 400 | 44–48% (mean 45.6%) | 37–42% | 395–400 Hz |
+
+At 400 Hz the MAVLink streams keep the requested rate up to 10 Hz with `PLANE_GCS_SEND_TIME_US` at 750 µs. The SCH16T is read at 1 kHz and the main loop waits for an IMU sample, so at 400 Hz the loops last mostly 2 or 3 ms, 2.5 ms on average: the 3 ms loops are just over the long-loop threshold (1.2 times the period), and `PM.NLon` counts about 7% of the loops with `PM.MaxT` at most 3.03 ms.
+
+The measurements below are with the code in the flash and the 200 Hz loop. On the V1.2 (one SPI bus for all the sensors, no log, no CAN) with ArduPlane, a GPS fix with EKF3 using it and the live FFT on (`INS_FFT_LIVE 1`): core 0 at 61%, core 1 at 35%, scheduler load 61%. The flash mode counted: in DIO, the same load took core 0 to 88% and held the loop at 177 Hz ("Main loop slow"), while without the GPS fix it stayed at 200 Hz; compiling for speed (`-O2`) instead of size made no difference. Without a GPS fix the main loop alone reaches about 300 Hz; at 400 Hz it does not keep up and the PreArm check reports "Main loop slow". The SPI bus thread takes about a third of a core: on core 0, at the main loop priority, it held the loop at 190 Hz.
 
 The V1.5 adds the second SPI bus thread, the log writer and DroneCAN on core 1, and the log messages on the main loop. On the bench, with ArduPlane at rest, disarmed, without a GPS fix and without a log running, the main loop holds 200 Hz and `SYS_STATUS.load` reads 46–47%; with the log on (`LOG_DISARMED 1`, `LOG_BITMASK 65535`) core 0 is at 49% and core 1 at 40%, as without it.
 
@@ -282,7 +294,7 @@ Drivers and libraries:
 - `GCS_MAVLink`: `SYS_STATUS.load` from the core load when the HAL measures it, `NAMED_VALUE_FLOAT` `CPU0`/`CPU1`.
 - `AP_HAL::Scheduler::heartbeat()`: heartbeat of long-running library threads, for a HAL that watches its threads from outside; does nothing elsewhere.
 - `AP_Scheduler::task_name()`: name of a task from the index in `persistent_data.scheduler_task`, for the stall reports.
-- ArduPlane: `PLANE_GCS_SEND_TIME_US`, the per-loop time of `update_send` set by the board (750 µs here for the 200 Hz loop; at 50 Hz the board needs 3 ms).
+- ArduPlane: `PLANE_GCS_SEND_TIME_US`, the per-loop time of `update_send` set by the board (750 µs here for the 400 Hz loop; at 50 Hz the board needs 3 ms).
 
 ## Status
 

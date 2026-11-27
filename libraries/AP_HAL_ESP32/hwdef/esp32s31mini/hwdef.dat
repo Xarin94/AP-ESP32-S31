@@ -105,6 +105,10 @@ define HAL_SCH16T_SAMPLE_RATE 1000
 # libraries/AP_InertialSensor/FFT_LIVE.md); the FFT thread runs on core 1
 define AP_INERTIALSENSOR_SPECTRUM_ENABLED 1
 
+# IMU temperature calibration (INS_TCAL1_*): off until INS_TCAL1_ENABLE is set,
+# 2 learns it from a cold start
+define HAL_INS_TEMPERATURE_CAL_ENABLE 1
+
 # sensor axes as on the V1.2: SCH16T x, -y, -z; the RM3100 module sits upside
 # down under the board (x, -y, -z), from a reading level and facing north
 IMU SCH16T SPI:sch16t ROTATION_ROLL_180
@@ -147,15 +151,20 @@ ESP32_SERIAL UART_NUM_2       GPIO_NUM_10  GPIO_NUM_11
 # UART3 is never connected to its pins
 ESP32_SERIAL UART_NUM_0       GPIO_NUM_8   GPIO_NUM_9
 
-# time per loop for the GCS. The board runs a 200 Hz loop (SCHED_LOOP_RATE in
-# defaults.parm), 5 ms per loop: the budget must fit in what the fast tasks
-# leave. At 50 Hz it needs 3 ms (with 750 us the streams ran at 0.5 Hz)
+# time per loop for the GCS. The board runs a 400 Hz loop (SCHED_LOOP_RATE in
+# defaults.parm), 2.5 ms per loop: the budget must fit in what the fast tasks
+# leave; every stream keeps 10 Hz. At 50 Hz it needs 3 ms (with 750 us the
+# streams ran at 0.5 Hz)
 define PLANE_GCS_SEND_TIME_US 750
 
 # asks the USB Serial/JTAG not to reset the chip from DTR/RTS. On the S31
 # (chip revision v0.0) the reset still happens with DTR low and RTS high,
 # although the disable bit reads back set: open the port lowering RTS first
 define HAL_ESP32_USB_NO_CHIP_RESET 1
+
+# the ESP-IDF console shares the USB with MAVLink: text only until the end of
+# setup(), then SERIAL0 carries MAVLink alone (a crash dump is still printed)
+define HAL_ESP32_CONSOLE_SETUP_ONLY 1
 
 # MAVLink over Wi-Fi UDP (SERIAL1): access point, 192.168.4.1:14550
 define HAL_ESP32_WIFI 2
@@ -165,6 +174,11 @@ define WIFI_PWD "ardupilot1"
 # CAN: TWAI controller on the MCP2542FD transceiver (DroneCAN)
 #         TXPIN        RXPIN
 ESP32_CAN GPIO_NUM_57  GPIO_NUM_56
+# SLCAN on demand, as on the STM32 boards with one USB port: with
+# CAN_SLCAN_CPORT 1 (at boot) and CAN_SLCAN_SERNUM 0 the USB (SERIAL0) turns
+# into an SLCAN adapter on CAN1 until CAN_SLCAN_TIMOUT or a reboot. The S31
+# has no second USB CDC: the USB connector is the USB Serial/JTAG
+define AP_CAN_SLCAN_ENABLED 1
 
 # PWM outputs SERVO1-8 (MCPWM): pairs 1-2, 3-4, 5-6, 7-8 share one timer, so
 # one frequency

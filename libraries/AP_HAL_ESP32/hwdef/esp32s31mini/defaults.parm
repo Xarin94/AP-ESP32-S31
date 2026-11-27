@@ -1,7 +1,8 @@
 # MINI AHRS board V1.5 (ESP32-S31)
-# 200 Hz main loop (the loop reaches about 300 Hz): PLANE_GCS_SEND_TIME_US in
-# hwdef.dat is sized for it
-SCHED_LOOP_RATE 200
+# 400 Hz main loop, as on the V1.4: with the code running from the PSRAM
+# (target sdkconfig.defaults) core 0 is at about 46% with ArduPlane, a GPS at
+# 50 Hz, EKF3 and the log on
+SCHED_LOOP_RATE 400
 # u-blox on the GPS serial (IO3/IO4, SERIAL3) at 460800: with
 # GPS_AUTO_CONFIG 1 the driver only accepts it at 230400, so the module must
 # already send UBX on its own
