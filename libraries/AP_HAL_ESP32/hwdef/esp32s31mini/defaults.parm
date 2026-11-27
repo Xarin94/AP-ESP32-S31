@@ -9,6 +9,9 @@ SCHED_LOOP_RATE 400
 SERIAL3_PROTOCOL 5
 SERIAL3_BAUD 460
 GPS_AUTO_CONFIG 0
+# battery voltage from the divider on IO48 (BATT_VOLT_PIN 48,
+# BATT_VOLT_MULT 23 from the hwdef)
+BATT_MONITOR 3
 # DroneCAN on for CAN nodes; servos are PWM on SERVO1-8 by default (a
 # DroneCAN servo or ESC is added with CAN_D1_UC_SRV_BM / CAN_D1_UC_ESC_BM)
 CAN_P1_DRIVER 1

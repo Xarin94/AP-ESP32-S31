@@ -64,6 +64,7 @@ If Windows reports "USB device not recognized": with the USB unplugged, connect 
 | CAN TX / RX (MCP2542FD) | 57 / 56 | `ESP32_CAN`, DroneCAN |
 | SERVO1-8 | 42, 43, 44, 45, 46, 47, 54, 55 | `ESP32_RCOUT`, MCPWM; outputs 1-2, 3-4, 5-6, 7-8 share a timer (one frequency) |
 | LED1 / LED2 | 13 / 12 | status LEDs, see below |
+| Battery voltage (divider 220k / 10k) | 48 | analog pin 48, `BATT_MONITOR 3`, see [Battery voltage](#battery-voltage) |
 | Wi-Fi | — | SERIAL1, access point `ardupilot-s31` (password `ardupilot1`), UDP 192.168.4.1:14550 |
 
 Notes on the V1.5 board:
@@ -166,6 +167,12 @@ The SD erase command was accepted by the memory without erasing every sector: a 
 ### CAN
 
 TWAI controller on the MCP2542FD transceiver, TX IO57 and RX IO56. `defaults.parm` enables DroneCAN at 1 Mbit/s (`CAN_P1_DRIVER 1`, `CAN_D1_PROTOCOL 1`); the servos stay on PWM (`CAN_D1_UC_SRV_BM 0`), a DroneCAN servo or ESC is added with `CAN_D1_UC_SRV_BM` / `CAN_D1_UC_ESC_BM`. DroneCAN compasses are enabled.
+
+### Battery voltage
+
+The battery voltage comes from a divider of 220 kΩ to VBAT and 10 kΩ to GND on IO48 (23:1), on every board from the V1.4 on. IO6 has no ADC on the S31: the SAR ADC inputs are GPIO42-49 (ADC1) and GPIO50-57 (ADC2), datasheet v0.6, Table 2-7. `defaults.parm` sets `BATT_MONITOR 3` (voltage only); the hwdef gives `BATT_VOLT_PIN 48` and `BATT_VOLT_MULT 23`.
+
+IO48 is ADC1 channel 6, the N side of the differential pair ADC1_CH3. The S31 ADC has one input range and 17-bit codes, and ESP-IDF 6.1 has no calibration for it: a single-ended read gives codes 0-4393 for -2 to +2 V, with 0 V at mid-scale and the code of an N-side input inverted (ESP-IDF ADC oneshot documentation and `test_apps`). `AnalogIn` converts the code with this nominal scale, so the pin reads 0 to about 2 V and the battery up to about 46 V; offset and gain are not calibrated, so check the reading with a meter and correct it with `BATT_VOLT_MULT` (and `BATT_VLT_OFFSET`, subtracted at the pin). On the V1.5 bench board, on 2026-11-27, it read 8.35 V, stable within 15 mV; not compared with a meter yet.
 
 ### Serial ports and telemetry
 

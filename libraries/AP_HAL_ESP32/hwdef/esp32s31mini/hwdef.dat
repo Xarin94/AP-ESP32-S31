@@ -194,6 +194,14 @@ ESP32_RCOUT GPIO_NUM_55
 # no RC input pin: RC comes from a serial protocol (CRSF/ELRS/SBUS on
 # SERIAL2/3/4) or DroneCAN
 
+# battery voltage on IO48 (ADC1 channel 6, the N side of ADC1_CH3 in the
+# datasheet), from a divider of 220k to VBAT and 10k to GND (23:1). The S31
+# ADC reads 0-2 V single-ended, so up to about 46 V of battery. Analog pin
+# 48 for ArduPilot (BATT_VOLT_PIN); BATT_MONITOR 3 is set in defaults.parm
+ESP32_ADC_PIN ADC1_GPIO48_CHANNEL 1 48
+define HAL_BATT_VOLT_PIN 48
+define HAL_BATT_VOLT_SCALE 23.0
+
 # status LEDs, active high: LED1 start-up, LED2 GPS fix and position, on IO13
 # and IO12 as measured on the V1.2 (IO14 and IO15 in the schematic). LED3 is
 # not driven

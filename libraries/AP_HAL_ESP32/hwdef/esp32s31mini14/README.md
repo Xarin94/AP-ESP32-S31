@@ -63,6 +63,7 @@ Common to both boards:
 | Compass | RM3100 on SPI bus 2, CS IO2 | `ROTATION_ROLL_180`; off in `defaults.parm` (`COMPASS_ENABLE 0`) |
 | Airspeed | ELVH on SPI bus 2, CS IO38 | ArduPlane only (`ARSPD_TYPE 21`) |
 | SD card | SPI bus 2, CS IO39 | logs in `/SDCARD/APM/LOGS`, as on the V1.5 |
+| Battery voltage | divider 220k / 10k on IO48 | `BATT_MONITOR 3`, analog pin 48, `BATT_VOLT_MULT 23` |
 | CAN1 | TWAI on the MCP2542FD (TX IO57, RX IO56) | DroneCAN, 1 Mbit/s |
 
 S1, S2 and S3 take any serial protocol of ArduPilot (`SERIALn_PROTOCOL`); on the V1.4 S3 is wired to the DAN-F10N. The HAL sets parity, stop bits, RX and TX inversion (`SERIALn_OPTIONS` bits 0 and 1) and the RX/TX swap (bit 3); half-duplex, flow control and the pull options are not supported. SERIAL4 is on the UART0 of the S31, free because the console is on the USB: ESP-IDF 6.1 has no GPIO matrix signals for the UART3 of the S31 (`-1` in `uart_periph.c`), so UART3 is never connected to its pins. A TFmini on S1 needs `RNGFND1_TYPE 20`.
