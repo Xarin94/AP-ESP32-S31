@@ -254,7 +254,7 @@ Code:
 
 Build:
 - `Tools/ardupilotwaf/boards.py`, `esp32.py`: `esp32s31` board class (toolchain `riscv32-esp-elf`, `-march=rv32imafcb_zicsr_zifencei_zaamo_zalrsc_zcb_zcmp_zcmt -mabi=ilp32f`, without the PIE/Xesploop extensions, because ESP-IDF moves the tasks that use them to core 1); DroneCAN enabled when the hwdef has `ESP32_CAN` lines.
-- `libraries/AP_HAL_ESP32/targets/esp32s31/`: ESP-IDF project, `sdkconfig.defaults` (320 MHz, flash in QIO, newlib, PSRAM disabled), partitions (6 MB app). The CMake file links every component, because in ESP-IDF 6 the HAL is split into `esp_hal_*` components with their own ROM linker scripts.
+- `libraries/AP_HAL_ESP32/targets/esp32s31/`: ESP-IDF project, `sdkconfig.defaults` (320 MHz, flash in QIO, code run from the octal PSRAM, newlib), partitions (6 MB app). The CMake file links every component, because in ESP-IDF 6 the HAL is split into `esp_hal_*` components with their own ROM linker scripts.
 
 ESP32 HAL on ESP-IDF 6.1:
 - `CANIface` (new): CAN on TWAI with the `esp_twai` node driver; RX through a FreeRTOS queue from the ISR, TX slots, loopback for the DroneCAN time sync, bus-off recovery at 1 Hz.

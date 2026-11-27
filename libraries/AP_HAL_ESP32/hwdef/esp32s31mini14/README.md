@@ -85,7 +85,7 @@ Checked on the V1.4 with ArduCopter, at rest and indoors: SCH16T (about -1000 mG
 
 ## Code run from the PSRAM
 
-`sdkconfig.defaults` in this directory adds ESP-IDF settings after those of the esp32s31 target (the waf build passes it when a board directory has one). On the V1.4 the code and read-only data are copied from the flash to the octal PSRAM at start-up and run from there (`CONFIG_SPIRAM_XIP_FROM_PSRAM`), at 200 MHz. The PSRAM is not added to the heap, so the ArduPilot heap and the DMA buffers stay in internal SRAM.
+The code and read-only data are copied from the flash to the octal PSRAM at start-up and run from there (`CONFIG_SPIRAM_XIP_FROM_PSRAM`), at 200 MHz. It is set in the `sdkconfig.defaults` of the esp32s31 target (`targets/esp32s31/esp-idf`), so the V1.4 and the V1.5 build the same way; a board directory can still add its own `sdkconfig.defaults`, applied after the target one. The PSRAM is not added to the heap, so the ArduPilot heap and the DMA buffers stay in internal SRAM.
 
 The instruction cache of the S31 is 16 kB; with the code in the QIO flash, a large part of core 0 time was spent waiting for cache refills. Measured with ArduCopter on the V1.4, disarmed, indoors without a GPS fix:
 
